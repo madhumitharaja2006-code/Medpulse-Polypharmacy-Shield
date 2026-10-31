@@ -1,0 +1,2674 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <title>MedPulse — Visual Pill Matching, Smart Calendar & Broken Image Fixes</title>
+  
+  <!-- Google Fonts: Inter, Caveat, Shadows Into Light, Noto Sans Tamil, Noto Sans Devanagari, Space Mono -->
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Caveat:wght@600;700&family=Inter:wght@300;400;500;600;700;800;900&family=Noto+Sans+Devanagari:wght@400;600;700;800&family=Noto+Sans+Tamil:wght@400;600;700;800&family=Shadows+Into+Light&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet" />
+
+  <!-- Tailwind CSS CDN -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          fontFamily: {
+            sans: ['Inter', 'sans-serif'],
+            caveat: ['Caveat', 'cursive'],
+            shadows: ['"Shadows Into Light"', 'cursive'],
+            tamil: ['"Noto Sans Tamil"', 'sans-serif'],
+            hindi: ['"Noto Sans Devanagari"', 'sans-serif'],
+            mono: ['"Space Mono"', 'monospace'],
+          },
+          colors: {
+            brand: {
+              50: '#eff6ff',
+              100: '#dbeafe',
+              500: '#3b82f6',
+              600: '#2563eb',
+              700: '#1d4ed8',
+              800: '#1e40af',
+              900: '#1e3a8a',
+            },
+            danger: {
+              50: '#fef2f2',
+              100: '#fee2e2',
+              500: '#ef4444',
+              600: '#dc2626',
+              700: '#b91c1c',
+            },
+            warning: {
+              50: '#fffbeb',
+              100: '#fef3c7',
+              500: '#f59e0b',
+              600: '#d97706',
+            },
+            success: {
+              50: '#ecfdf5',
+              100: '#d1fae5',
+              500: '#10b981',
+              600: '#059669',
+            }
+          },
+          animation: {
+            'pulse-slow': 'pulse 3s cubic-bezier(0.4, 0, 0.6, 1) infinite',
+            'bounce-soft': 'bounce 2s infinite',
+          }
+        }
+      }
+    }
+  </script>
+
+  <!-- React 18, ReactDOM & Babel Standalone CDN -->
+  <script src="https://unpkg.com/react@18/umd/react.production.min.js" crossorigin></script>
+  <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js" crossorigin></script>
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+
+  <style>
+    /* CRITICAL ARCHITECTURAL RESET */
+    html, body {
+      margin: 0;
+      padding: 0;
+      min-height: 100vh;
+      background-color: #f1f5f9; /* slate-100 */
+      overflow-x: hidden;
+      overflow-y: auto;
+      font-family: 'Inter', sans-serif;
+      -webkit-tap-highlight-color: transparent;
+    }
+
+    /* Custom scrollbars */
+    ::-webkit-scrollbar {
+      width: 4px;
+      height: 4px;
+    }
+    ::-webkit-scrollbar-track {
+      background: rgba(0, 0, 0, 0.04);
+    }
+    ::-webkit-scrollbar-thumb {
+      background: rgba(0, 0, 0, 0.18);
+      border-radius: 9999px;
+    }
+
+    /* Thermal ECG grid */
+    .thermal-ecg-grid {
+      background-color: #fff1f2;
+      background-image: 
+        linear-gradient(rgba(244, 63, 94, 0.25) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(244, 63, 94, 0.25) 1px, transparent 1px),
+        linear-gradient(rgba(244, 63, 94, 0.08) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(244, 63, 94, 0.08) 1px, transparent 1px);
+      background-size: 25px 25px, 25px 25px, 5px 5px, 5px 5px;
+    }
+
+    /* Doctor Prescription Pad */
+    .paper-texture {
+      background-color: #fffdf9;
+      background-image: radial-gradient(#e2d9cc 0.75px, transparent 0.75px);
+      background-size: 12px 12px;
+    }
+
+    .doctor-ink {
+      font-family: 'Caveat', cursive;
+      font-weight: 700;
+      line-height: 1.25;
+    }
+
+    .doctor-stamp {
+      border: 2px dashed #1e3a8a;
+      color: #1e3a8a;
+      transform: rotate(-3deg);
+    }
+
+    /* Shimmer animation for active scanner */
+    @keyframes scanbeam {
+      0% { top: 0%; opacity: 0.8; }
+      50% { top: 85%; opacity: 1; }
+      100% { top: 0%; opacity: 0.8; }
+    }
+    .scanner-beam {
+      animation: scanbeam 2.8s ease-in-out infinite;
+    }
+
+    /* Metallic Foil Shimmer for Pills */
+    .foil-metallic {
+      background: linear-gradient(135deg, #cbd5e1 0%, #f8fafc 40%, #94a3b8 70%, #e2e8f0 100%);
+    }
+  </style>
+</head>
+
+<body className="min-h-screen bg-slate-100 overflow-x-hidden overflow-y-auto m-0 p-0">
+  <div id="root"></div>
+
+  <!-- APPLICATION JAVASCRIPT & REACT LOGIC -->
+  <script type="text/babel">
+    const { useState, useEffect, useRef, useMemo } = React;
+
+    // --- REUSABLE SVG ICONS (Zero external font dependencies) ---
+    const Icon = ({ name, className = "w-5 h-5", ...props }) => {
+      switch (name) {
+        case "heart":
+          return <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" {...props}><path d="M19 14c1.49-1.46 3-3.21 3-5.5A5.5 5.5 0 0 0 16.5 3c-1.76 0-3 .5-4.5 2-1.5-1.5-2.74-2-4.5-2A5.5 5.5 0 0 0 2 8.5c0 2.3 1.5 4.05 3 5.5l7 7Z"/></svg>;
+        case "activity":
+        case "pulse":
+          return <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" {...props}><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg>;
+        case "shield-alert":
+          return <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" {...props}><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>;
+        case "shield-check":
+          return <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" {...props}><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><path d="m9 12 2 2 4-4"/></svg>;
+        case "scan":
+          return <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" {...props}><path d="M3 7V5a2 2 0 0 1 2-2h2"/><path d="M17 3h2a2 2 0 0 1 2 2v2"/><path d="M21 17v2a2 2 0 0 1-2 2h-2"/><path d="M7 21H5a2 2 0 0 1-2-2v-2"/></svg>;
+        case "calendar":
+          return <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" {...props}><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>;
+        case "file-text":
+          return <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" {...props}><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg>;
+        case "info":
+          return <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" {...props}><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>;
+        case "check":
+          return <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" {...props}><polyline points="20 6 9 17 4 12"/></svg>;
+        case "lock":
+          return <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" {...props}><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>;
+        case "unlock":
+          return <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" {...props}><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 9.9-1"/></svg>;
+        case "volume-2":
+          return <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" {...props}><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14"/><path d="M15.54 8.46a5 5 0 0 1 0 7.07"/></svg>;
+        case "phone":
+          return <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" {...props}><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"/></svg>;
+        case "qr":
+          return <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" {...props}><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg>;
+        case "zap":
+          return <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" {...props}><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>;
+        case "pill":
+          return <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" {...props}><path d="m10.5 20.5 10-10a4.95 4.95 0 1 0-7-7l-10 10a4.95 4.95 0 1 0 7 7Z"/><path d="m8.5 8.5 7 7"/></svg>;
+        case "alert-triangle":
+          return <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" {...props}><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>;
+        case "x":
+          return <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" {...props}><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>;
+        case "edit":
+          return <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" {...props}><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>;
+        case "clock":
+          return <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" {...props}><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>;
+        case "camera":
+          return <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" {...props}><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg>;
+        case "dots-vertical":
+          return <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" {...props}><circle cx="12" cy="12" r="1"/><circle cx="12" cy="5" r="1"/><circle cx="12" cy="19" r="1"/></svg>;
+        case "external-link":
+          return <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" {...props}><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>;
+        case "share":
+          return <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" {...props}><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/></svg>;
+        case "calculator":
+          return <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" {...props}><rect x="4" y="2" width="16" height="20" rx="2"/><line x1="8" y1="6" x2="16" y2="6"/><line x1="16" y1="14" x2="16" y2="18"/><path d="M16 10h.01"/><path d="M12 10h.01"/><path d="M8 10h.01"/><path d="M12 14h.01"/><path d="M8 14h.01"/><path d="M12 18h.01"/><path d="M8 18h.01"/></svg>;
+        case "eye":
+          return <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" {...props}><path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7Z"/><circle cx="12" cy="12" r="3"/></svg>;
+        default:
+          return null;
+      }
+    };
+
+    // --- 3-LANGUAGE TRANSLATIONS (EN, TA, HI) ---
+    const i18n = {
+      en: {
+        appName: "MedPulse",
+        tagline: "Elderly Chronic Care & Drug Shield",
+        tabInfo: "Info",
+        tabFollow: "Follow-ups",
+        tabScan: "Scanner",
+        tabReports: "Reports",
+        tabMonitor: "Med-Monitor",
+        morning: "Morning (Breakfast)",
+        lunch: "Lunch (Afternoon)",
+        night: "Night (Bedtime)",
+        takenLocked: "Taken & Locked",
+        quarantinedTitle: "Auto-Removed by AI Safety Shield",
+        readAloud: "Listen",
+        editProfile: "Edit Profile",
+        unifiedQr: "Unified Patient QR Card",
+        qrSubtext: "Scan at any hospital counter for verified e-Rx push",
+        alertBanner: "Active Drug Collisions Quarantined!",
+        simTitle: "⚡ Step-by-Step Hospital Simulator",
+        simHideIn: "Auto-hiding in",
+        resetAll: "Reset to Clean 0/6 State",
+        blueFree: "Blue = Doctor Free",
+        redBusy: "Red = Waitlist Full",
+        twoStageTitle: "Two-Stage Cross-Verification",
+        stage1Done: "Rx Scanned (Handwriting OCR Verified)",
+        stage2Pending: "Waiting for Pharmacy Tablet Scan",
+        stage2Done: "100% Cross-Verified with Pharmacy Strip! ✅",
+        multiEquivTitle: "⚡ Multi-Tablet Equivalence Computed",
+        multiEquivSub: "2x 75mg Strips = 150mg Prescribed Active Salt",
+        doctorTitle: "Doctor's Clinical Portal",
+        labTrends: "Patient Renal & Metabolic Labs",
+        saltsTable: "Active Chemical Salts & Bioavailability",
+        aadhaarTitle: "Govt. ID Verification",
+        aadhaarSubtitle: "Enter 12-Digit Aadhaar to link chronic care records",
+        otpPrompt: "Enter 6-Digit OTP sent to +91 98422 XXXXX",
+        fastPassBtn: "⚡ Judge Fast-Pass: Auto-Fill & Verify",
+        verifyBtn: "Verify & Enter App",
+        sendWhatsAppCaretaker: "📱 Send WhatsApp to Caretaker to Book",
+        visualPillMatch: "Visual Match: Blister Strip & Pill Color",
+        matchPhysicalStrip: "Physical Blister Strip in Hand",
+        doctorCalendarTitle: "Doctor-Specific Consultation Calendar",
+        continuousWaitlist: "Continuous Waitlist Locked",
+        bookingOpen: "Continuous Booking Window Open",
+        selectDoctor: "Select Specialist Doctor",
+        matchConfirmation: "✅ This Matches the Pill in My Hand",
+      },
+      ta: {
+        appName: "மெட்பல்ஸ் (MedPulse)",
+        tagline: "முதியோர் மருத்துவப் பாதுகாப்பு & மருந்து கவசம்",
+        tabInfo: "விவரம்",
+        tabFollow: "சந்திப்புகள்",
+        tabScan: "ஸ்கேனர்",
+        tabReports: "அறிக்கைகள்",
+        tabMonitor: "மருத்துவர்",
+        morning: "காலை (உணவுக்கு பின்)",
+        lunch: "மதியம் (உணவுக்கு பின்)",
+        night: "இரவு (தூங்கும் முன்)",
+        takenLocked: "எடுக்கப்பட்டது & பூட்டப்பட்டது",
+        quarantinedTitle: "AI பாதுகாப்பு அமைப்பால் அகற்றப்பட்டது",
+        readAloud: "குரலில் கேட்க",
+        editProfile: "விவரம் திருத்து",
+        unifiedQr: "ஒருங்கிணைந்த நோயாளி QR அட்டை",
+        qrSubtext: "மருத்துவமனைகளில் மருந்து சீட்டு இணைக்க இதைக் காட்டவும்",
+        alertBanner: "உயிருக்கு ஆபத்தான மருந்து முரண்பாடு!",
+        simTitle: "⚡ படி-படியான மருத்துவமனை சிமுலேட்டர்",
+        simHideIn: "மறையும் நேரம்",
+        resetAll: "மீண்டும் தொடங்கு (0/6)",
+        blueFree: "நீலம் = மருத்துவர் நேரம் உண்டு",
+        redBusy: "சிகப்பு = முன்பதிவு நிறைந்தது",
+        twoStageTitle: "இரு-படி உறுதிப்படுத்தல் முறை",
+        stage1Done: "மருந்து சீட்டு படிக்கப்பட்டது",
+        stage2Pending: "உறுதிப்படுத்த மாத்திரை அட்டையை ஸ்கேன் செய்யவும்",
+        stage2Done: "மாத்திரை அட்டை 100% துல்லியமாக உறுதி செய்யப்பட்டது! ✅",
+        multiEquivTitle: "⚡ பல மாத்திரை அளவீட்டு சமன்பாடு கணக்கிடப்பட்டது",
+        multiEquivSub: "2x 75mg அட்டைகள் = மருத்துவர் குறித்த 150mg அளவு",
+        doctorTitle: "மருத்துவர் பரிசோதனை பலகை",
+        labTrends: "சிறுநீரக & இரத்த பரிசோதனை முடிவுகள்",
+        saltsTable: "மருந்து மூலக்கூறுகள் & அளவுகள்",
+        aadhaarTitle: "அரசு அடையாள சரிபார்ப்பு",
+        aadhaarSubtitle: "மருத்துவ பதிவுகளை இணைக்க 12-இலக்க ஆதார் எண் உள்ளிடவும்",
+        otpPrompt: "+91 98422 XXXXX-க்கு வந்த 6-இலக்க OTP உள்ளிடவும்",
+        fastPassBtn: "⚡ நடுவர் நேரடி நுழைவு: தானியங்கி சரிபார்ப்பு",
+        verifyBtn: "சரிபார்த்து உள்ளே நுழையவும்",
+        sendWhatsAppCaretaker: "📱 முன்பதிவு செய்ய மகனுக்கு வாட்ஸ்அப் அனுப்பவும்",
+        visualPillMatch: "மாத்திரை அட்டை & நிற காட்சி பொருத்தம்",
+        matchPhysicalStrip: "கையில் உள்ள மாத்திரை அட்டை",
+        doctorCalendarTitle: "மருத்துவர் சந்திப்பு காலண்டர்",
+        continuousWaitlist: "தொடர் முன்பதிவு நிறைந்தது",
+        bookingOpen: "முன்பதிவு தொடங்கியது",
+        selectDoctor: "சிறப்பு மருத்துவரை தேர்வு செய்க",
+        matchConfirmation: "✅ என் கையில் உள்ள மாத்திரையுடன் இது பொருந்துகிறது",
+      },
+      hi: {
+        appName: "मेडपल्स (MedPulse)",
+        tagline: "वरिष्ठ नागरिक देखभाल एवं दवा सुरक्षा शील्ड",
+        tabInfo: "विवरण",
+        tabFollow: "फॉलो-अप",
+        tabScan: "स्कैनर",
+        tabReports: "रिपोर्ट्स",
+        tabMonitor: "डॉक्टर",
+        morning: "सुबह (नाश्ते के बाद)",
+        lunch: "दोपहर (खाने के बाद)",
+        night: "रात (सोने से पहले)",
+        takenLocked: "दवा ली गई और लॉक हुई",
+        quarantinedTitle: "AI सुरक्षा शील्ड द्वारा स्वतः हटाया गया",
+        readAloud: "सुनें",
+        editProfile: "प्रोफ़ाइल बदलें",
+        unifiedQr: "यूनिफाइड मरीज QR कार्ड",
+        qrSubtext: "ई-प्रिस्क्रिप्शन जोड़ने हेतु अस्पताल काउंटर पर दिखाएं",
+        alertBanner: "जानलेवा दवा टकराव पकड़ा गया!",
+        simTitle: "⚡ क्रमबद्ध अस्पताल सिम्युलेटर",
+        simHideIn: "गायब होने का समय",
+        resetAll: "रीसेट करें (0/6 स्थिति)",
+        blueFree: "नीला = डॉक्टर उपलब्ध",
+        redBusy: "लाल = वेटलिस्ट फुल",
+        twoStageTitle: "दो-चरणीय सत्यापन प्रक्रिया",
+        stage1Done: "पर्ची स्कैन पूरी",
+        stage2Pending: "पुष्टि के लिए दवा स्ट्रिप स्कैन की प्रतीक्षा",
+        stage2Done: "दवा स्ट्रिप के साथ 100% सत्यापित! ✅",
+        multiEquivTitle: "⚡ बहु-गोली खुराक तुल्यता गणना",
+        multiEquivSub: "2x 75mg स्ट्रिप्स = निर्धारित 150mg खुराक",
+        doctorTitle: "डॉक्टर क्लीनिकल पोर्टल",
+        labTrends: "किडनी व रक्त जांच रिपोर्ट",
+        saltsTable: "सक्रिय रासायनिक घटक एवं खुराक",
+        aadhaarTitle: "सरकारी पहचान सत्यापन",
+        aadhaarSubtitle: "दवा रिकॉर्ड जोड़ने हेतु 12-अंकीय आधार संख्या दर्ज करें",
+        otpPrompt: "+91 98422 XXXXX पर भेजा गया 6-अंकीय OTP दर्ज करें",
+        fastPassBtn: "⚡ जज फास्ट-पास: स्वतः भरें और प्रवेश करें",
+        verifyBtn: "सत्यापित करें और प्रवेश करें",
+        sendWhatsAppCaretaker: "📱 बेटे को स्लॉट बुक करने हेतु व्हाट्सएप भेजें",
+        visualPillMatch: "दवा स्ट्रिप व रंग विजुअल मिलान",
+        matchPhysicalStrip: "हाथ में मौजूद दवा का पत्ता",
+        doctorCalendarTitle: "डॉक्टर परामर्श कैलेंडर",
+        continuousWaitlist: "लगातार वेटलिस्ट लॉक",
+        bookingOpen: "बुकिंग विंडो खुली है",
+        selectDoctor: "विशेषज्ञ डॉक्टर चुनें",
+        matchConfirmation: "✅ यह मेरे हाथ की दवा से बिल्कुल मेल खाती है",
+      }
+    };
+
+    // --- VISUAL PILL METADATA (FOR ELDERLY BLISTER STRIP MATCHING) ---
+    const PILL_VISUAL_MAP = {
+      dytor: {
+        foilType: "silver-blue",
+        blisterBg: "from-slate-200 via-blue-100 to-slate-300",
+        pillColor: "#0284c7",
+        pillShape: "capsule",
+        pocketCount: 6,
+        stripLabel: "DYTOR 10",
+        packagingDesc: {
+          en: "Silver aluminium foil blister strip with deep blue elongated capsules. Marked 'DYTOR 10' on the reverse foil.",
+          ta: "வெள்ளி நிற அலுமினிய அட்டை, நீல நிற காப்ஸ்யூல்கள். பின்புறம் 'DYTOR 10' என அச்சிடப்பட்டிருக்கும்.",
+          hi: "सिल्वर एल्युमिनियम फॉयल पत्ता जिसमें गहरे नीले रंग के कैप्सूल हैं। पीछे 'DYTOR 10' लिखा है।"
+        }
+      },
+      shelcal: {
+        foilType: "white-cyan",
+        blisterBg: "from-white via-sky-50 to-slate-200",
+        pillColor: "#ffffff",
+        pillShape: "caplet",
+        pocketCount: 6,
+        stripLabel: "SHELCAL 500",
+        packagingDesc: {
+          en: "White and teal blister pack with thick white oval calcium caplets. Large size.",
+          ta: "வெள்ளை மற்றும் நீல அட்டை, பெரிய வெள்ளை நிற நீள்வட்ட கால்சியம் மாத்திரைகள்.",
+          hi: "सफेद और नीले रंग का पैक, बड़े सफेद अंडाकार कैल्शियम टैबलेट।"
+        }
+      },
+      arkamin: {
+        foilType: "amber-gold",
+        blisterBg: "from-amber-100 via-yellow-50 to-amber-200",
+        pillColor: "#f8fafc",
+        pillShape: "round-mini",
+        pocketCount: 8,
+        stripLabel: "ARKAMIN 0.1",
+        packagingDesc: {
+          en: "Amber golden metallic blister strip with tiny miniature white round tablets (Clonidine 100mcg).",
+          ta: "மஞ்சள் தங்க நிற அட்டை, மிகச் சிறிய வட்ட வடிவ வெள்ளை மாத்திரைகள்.",
+          hi: "हल्के सुनहरे रंग की स्ट्रिप, जिसमें बहुत छोटी गोल सफेद गोलियां हैं।"
+        }
+      },
+      torsid: {
+        foilType: "crimson-red",
+        blisterBg: "from-red-600 via-rose-500 to-red-700",
+        pillColor: "#ffffff",
+        pillShape: "round",
+        pocketCount: 6,
+        stripLabel: "TORSID 10",
+        packagingDesc: {
+          en: "Vibrant crimson RED metallic foil blister strip. Silver blister cavities with white round tablets. Marked 'TORSID 10'.",
+          ta: "அடர் சிகப்பு நிற பளபளப்பான அட்டை, வெள்ளை நிற வட்ட மாத்திரைகள். 'TORSID 10' என குறிக்கப்பட்டிருக்கும்.",
+          hi: "चमकदार लाल रंग का मैटेलिक पत्ता, सफेद गोल टैबलेट्स। 'TORSID 10' लिखा हुआ।"
+        }
+      },
+      telma: {
+        foilType: "silver-cyan",
+        blisterBg: "from-slate-100 via-sky-100 to-slate-300",
+        pillColor: "#ffffff",
+        pillShape: "oblong",
+        pocketCount: 6,
+        stripLabel: "TELMA 40",
+        packagingDesc: {
+          en: "Silver blister pack with blue stripe line. White oblong scored tablets.",
+          ta: "வெள்ளி நிற அட்டை, நடுவே நீலக் கோடு. வெள்ளை நிற நீள் மாத்திரைகள்.",
+          hi: "सिल्वर स्ट्रिप नीली धारी के साथ, सफेद अंडाकार टैबलेट।"
+        }
+      },
+      aldactone: {
+        foilType: "yellow-gold",
+        blisterBg: "from-yellow-300 via-amber-200 to-yellow-400",
+        pillColor: "#fef08a",
+        pillShape: "round",
+        pocketCount: 6,
+        stripLabel: "ALDACTONE 25",
+        packagingDesc: {
+          en: "Golden yellow blister strip with round pale yellow tablets. Spironolactone 25mg.",
+          ta: "தங்க நிற அட்டை, வெளிர் மஞ்சள் நிற வட்ட மாத்திரைகள்.",
+          hi: "गोल्डन यलो स्ट्रिप, हल्के पीले रंग की गोल दवाइयां।"
+        }
+      },
+      voveran: {
+        foilType: "orange-warning",
+        blisterBg: "from-orange-500 via-amber-400 to-red-500",
+        pillColor: "#c2410c",
+        pillShape: "round",
+        pocketCount: 6,
+        stripLabel: "VOVERAN SR 75",
+        packagingDesc: {
+          en: "Bright orange and silver blister strip with enteric-coated reddish-orange tablets. Warning: Contraindicated in CKD.",
+          ta: "ஆரஞ்சு நிற அட்டை, அடர் ஆரஞ்சு நிற வட்ட மாத்திரைகள் (சிறுநீரக நோயாளிகளுக்கு தடை செய்யப்பட்டது).",
+          hi: "चमकीली नारंगी स्ट्रिप, लाल-नारंगी कोटेड टैबलेट। (किडनी रोग में वर्जित)।"
+        }
+      },
+      pan40: {
+        foilType: "gold-enteric",
+        blisterBg: "from-yellow-400 via-amber-300 to-yellow-500",
+        pillColor: "#facc15",
+        pillShape: "round",
+        pocketCount: 6,
+        stripLabel: "PAN 40",
+        packagingDesc: {
+          en: "Golden yellow aluminium foil with round yellow enteric gastro-resistant tablets. Taken before breakfast.",
+          ta: "தங்க நிற அலுமினிய அட்டை, மஞ்சள் நிற வயிற்றுப்புண் மாத்திரைகள்.",
+          hi: "सुनहरी पीली एल्युमिनियम स्ट्रिप, पीली गैस्ट्रिक टैबलेट।"
+        }
+      },
+      pregabid: {
+        foilType: "dual-strip-red",
+        blisterBg: "from-slate-200 via-rose-100 to-red-600",
+        pillColor: "#e11d48",
+        pillShape: "dual-capsule",
+        pocketCount: 8,
+        stripLabel: "PREGABID 75 (2x)",
+        packagingDesc: {
+          en: "Distinctive silver-foil strip with two rows of red-and-white capsules. 2 tablets taken together equals 150mg dosage.",
+          ta: "வெள்ளி மற்றும் சிகப்பு அட்டை, இரண்டு வரிசை சிவப்பு/வெள்ளை காப்ஸ்யூல்கள் (இரண்டு மாத்திரைகள் = 150mg).",
+          hi: "सिल्वर-रेड स्ट्रिप, दो पंक्तियों में लाल-सफेद कैप्सूल (2 गोलियां = 150mg)।"
+        }
+      },
+      montair: {
+        foilType: "green-white",
+        blisterBg: "from-emerald-400 via-teal-100 to-slate-200",
+        pillColor: "#059669",
+        pillShape: "round",
+        pocketCount: 6,
+        stripLabel: "MONTAIR LC",
+        packagingDesc: {
+          en: "White and mint-green blister strip with round two-tone tablets (Montelukast + Levocetirizine).",
+          ta: "வெள்ளை மற்றும் பச்சை அட்டை, இரு நிற வட்ட மாத்திரைகள்.",
+          hi: "सफेद व हरी स्ट्रिप, दोहरे रंग की गोल टैबलेट।"
+        }
+      }
+    };
+
+    // --- DOCTORS LIST FOR TAB 2 REALISTIC CONTINUOUS WAITLIST CALENDAR ---
+    const DOCTORS_LIST = [
+      {
+        id: "dr-senthil",
+        name: "Dr. Senthil Kumar, MD, DM",
+        speciality: "Nephrology & CKD Care",
+        hospital: "KMCH Nephrology Centre",
+        waitDays: 30, // 30-Day continuous waitlist: Days 1-29 RED, Day 30+ BLUE
+        urgencyBadge: "30-Day Congestion",
+        opdRoom: "Room 108, Block B",
+        timing: "10:00 AM - 01:00 PM",
+        reason: "Renal Function & Serum Potassium Review"
+      },
+      {
+        id: "dr-meenakshi",
+        name: "Dr. K. Meenakshisundaram, MD, DM",
+        speciality: "Neurology & Neuropathy",
+        hospital: "Kaveri Institute of Neurosciences",
+        waitDays: 45, // 45-Day continuous waitlist: Days 1-44 RED, Day 45+ BLUE
+        urgencyBadge: "45-Day High Queue",
+        opdRoom: "Room 204, Brain Center",
+        timing: "02:30 PM - 05:30 PM",
+        reason: "Diabetic Peripheral Polyneuropathy & Pregabalin Titration"
+      },
+      {
+        id: "dr-bala",
+        name: "Dr. V. Balasubramanian, MS (Ortho)",
+        speciality: "Joints & Knee Osteoarthritis",
+        hospital: "Govt Orthopaedic Hospital",
+        waitDays: 14, // 14-Day continuous waitlist: Days 1-13 RED, Day 14+ BLUE
+        urgencyBadge: "14-Day Waitlist",
+        opdRoom: "OPD Counter 6",
+        timing: "09:00 AM - 12:30 PM",
+        reason: "Bilateral Knee OA Review (Non-NSAID Analgesia)"
+      },
+      {
+        id: "dr-suresh",
+        name: "Dr. T. Suresh Kumar, MD, FCCP",
+        speciality: "Pulmonology & Respiratory",
+        hospital: "Sai Chest & Allergy Polyclinic",
+        waitDays: 7, // 7-Day continuous waitlist: Days 1-6 RED, Day 7+ BLUE
+        urgencyBadge: "7-Day Fast Track",
+        opdRoom: "Room 12, Main Wing",
+        timing: "05:00 PM - 08:00 PM",
+        reason: "COPD / Bronchial Wheeze Review & Sleep Sedation Check"
+      }
+    ];
+
+    // --- 6 PROGRESSIVE SIMULATION STEPS WITH FULL CLINICAL REALISM ---
+    const HOSPITAL_STEPS = [
+      {
+        id: 1,
+        title: "Step 1: KMCH Nephrology",
+        tier: "Tier-1 QR",
+        clinic: "Kovai Medical Center and Hospital (KMCH) - Nephrology",
+        doctor: "Dr. S. Ramakrishnan, MD, DM (Nephro)",
+        type: "qr",
+        pills: [
+          { id: "dytor", name: "Dytor 10", salt: "Torsemide 10mg", timing: "morning", scheduleStr: "1 - 0 - 0", purpose: "Fluid clearance in CKD Stage 3b", hospital: "KMCH Nephrology" },
+          { id: "shelcal", name: "Shelcal 500", salt: "Calcium Carbonate 500mg + Vit D3", timing: "lunch", scheduleStr: "0 - 1 - 0", purpose: "Bone mineral homeostasis", hospital: "KMCH Nephrology" },
+          { id: "arkamin", name: "Arkamin 0.1", salt: "Clonidine HCl 100mcg", timing: "night", scheduleStr: "0 - 0 - 1", purpose: "Central antihypertensive", hospital: "KMCH Nephrology" },
+        ],
+        alertsTriggered: [],
+        reportsAdded: [
+          { id: "rep-ecg", title: "12-Lead Millimeter Thermal Paper ECG", type: "ecg", hospital: "KMCH Cardiology OPD", date: "26-Oct-2026", result: "Sinus rhythm, LVH with strain pattern, peaked T-waves" }
+        ],
+        notes: "Baseline kidney meds safely added (0 Alerts)."
+      },
+      {
+        id: 2,
+        title: "Step 2: Apollo Cardiology",
+        tier: "Tier-1 QR",
+        clinic: "Apollo Speciality Hospitals - Cardiology",
+        doctor: "Dr. Anantharaman, MD, DM (Cardio), FACC",
+        type: "qr",
+        pills: [
+          { id: "torsid", name: "Torsid 10", salt: "Torsemide 10mg", timing: "morning", scheduleStr: "1 - 0 - 0", purpose: "Diuretic for heart failure edema", hospital: "Apollo Cardiology", collidesWith: "dytor", quarantineReason: "Duplicate Salt Overdose: Dytor 10 (Torsemide 10mg) + Torsid 10 (Torsemide 10mg) = 20mg Loop Diuretic Overdose. Precipitates acute hypovolemic shock & renal shutdown." },
+          { id: "telma", name: "Telma 40", salt: "Telmisartan 40mg", timing: "morning", scheduleStr: "1 - 0 - 0", purpose: "Angiotensin Receptor Blocker", hospital: "Apollo Cardiology" },
+          { id: "aldactone", name: "Aldactone 25", salt: "Spironolactone 25mg", timing: "night", scheduleStr: "0 - 0 - 1", purpose: "Potassium-sparing aldosterone blocker", hospital: "Apollo Cardiology", collidesWith: "telma", quarantineReason: "Severe Hyperkalemia Cascade: Aldactone 25 + Telma 40 in CKD Stage 3b (eGFR 38 mL/min). Serum K+ predicted > 5.8 mEq/L leading to fatal cardiac arrhythmia." },
+        ],
+        alertsTriggered: [
+          {
+            id: "alert-duplicate-torsemide",
+            severity: "critical",
+            title: "CRITICAL ALERT #1: DUPLICATE SALT OVERDOSE (Dytor 10 + Torsid 10)",
+            desc: "Apollo Cardiology prescribed Torsid 10 (Torsemide 10mg) while patient is ALREADY taking Dytor 10 (Torsemide 10mg) from KMCH Nephrology. Both tablets contain the exact same active salt molecule, doubling the dose to 20mg daily! Causes severe hypovolemic shock, prerenal acute kidney failure, and profound electrolyte depletion.",
+            action: "Torsid 10 automatically quarantined and locked out from morning schedule.",
+            drugs: ["Dytor 10 (KMCH)", "Torsid 10 (Apollo)"]
+          },
+          {
+            id: "alert-hyperkalemia",
+            severity: "high",
+            title: "CRITICAL ALERT #2: HYPERKALEMIA CASCADE (Aldactone + Telma)",
+            desc: "Aldactone 25 (Spironolactone) prescribed alongside Telma 40 (Telmisartan) in a patient with baseline CKD Stage 3b (eGFR 38 mL/min). Combining a potassium-sparing diuretic with an ARB dramatically blocks renal potassium excretion, surging serum K+ past 5.8 mEq/L and precipitating peaked T-waves and cardiac arrest.",
+            action: "Aldactone held pending nephrologist serum potassium clearance.",
+            drugs: ["Aldactone 25", "Telma 40"]
+          }
+        ],
+        reportsAdded: [],
+        notes: "⚡ TRIGGERS REAL-TIME ALERT #1 (Duplicate Salt Overdose) & ALERT #2 (Hyperkalemia)!"
+      },
+      {
+        id: 3,
+        title: "Step 3: Govt Ortho Clinic",
+        tier: "Tier-3 Handwritten + Strip",
+        clinic: "Govt District Headquarters Orthopaedic Hospital, Coimbatore",
+        doctor: "Dr. V. Balasubramanian, MS (Ortho), Reg: TN-MCI-31094",
+        type: "handwritten-strip",
+        requiresCrossVerification: true,
+        pills: [
+          { id: "voveran", name: "Voveran SR 75", salt: "Diclofenac Sodium SR 75mg", timing: "morning", scheduleStr: "1 - 0 - 1", purpose: "Bilateral knee osteoarthritis analgesia", hospital: "Govt Ortho Clinic", collidesWith: "ckd", quarantineReason: "Fatal Contraindication: NSAID Kidney Crash in CKD Stage 3b (eGFR 38). Diclofenac blocks renal prostaglandin synthesis, causing acute anuric renal shutdown." },
+          { id: "pan40", name: "Pan 40", salt: "Pantoprazole 40mg", timing: "morning", scheduleStr: "1 - 0 - 0 (Before food)", purpose: "Gastric acid suppression", hospital: "Govt Ortho Clinic" }
+        ],
+        alertsTriggered: [
+          {
+            id: "alert-nsaid-ckd",
+            severity: "fatal",
+            title: "FATAL ALERT #3: NSAID KIDNEY CRASH (Diclofenac in CKD)",
+            desc: "Govt Ortho prescribed Voveran SR 75 (Diclofenac Sodium). The patient has documented Chronic Kidney Disease (eGFR 38 mL/min, Serum Creatinine 2.1 mg/dL). NSAIDs inhibit renal prostaglandin PGE2 synthesis, causing profound afferent arteriolar constriction and precipitating acute-on-chronic renal failure.",
+            action: "Voveran SR 75 auto-removed by AI Safety Shield. Paracetamol 650mg recommended as safe alternative.",
+            drugs: ["Voveran SR 75 (Govt Ortho)", "CKD Baseline Profile"]
+          }
+        ],
+        reportsAdded: [
+          { id: "rep-ortho-slip", title: "Photorealistic Handwritten Prescription Slip", type: "slip-ortho", hospital: "Govt Ortho Hospital, Coimbatore", date: "28-Oct-2026", result: "OP No: 2026/88412 - B/L Knee OA (K-L Gr III), Diclofenac prescribed" }
+        ],
+        notes: "⚡ TRIGGERS REAL-TIME ALERT #3 (NSAID Kidney Crash: Diclofenac in CKD)!"
+      },
+      {
+        id: 4,
+        title: "Step 4: Kaveri Neurology",
+        tier: "Tier-3 Handwritten + Multi-Strip",
+        clinic: "Kaveri Institute of Neurosciences",
+        doctor: "Dr. K. Meenakshisundaram, MD, DM (Neuro), Reg: TN-MCI-45120",
+        type: "handwritten-multistrip",
+        requiresCrossVerification: true,
+        prescribedDose: "Pregabalin 150mg (0-0-1 HS)",
+        scannedStrips: "2x Pregabid 75mg (75mg + 75mg = 150mg)",
+        isMultiEquivalence: true,
+        pills: [
+          { id: "pregabid", name: "Pregabid 75 (2 Tablets = 150mg)", salt: "Pregabalin 150mg Total (2x 75mg)", timing: "night", scheduleStr: "0 - 0 - 2 Tabs (75mg x 2)", purpose: "Diabetic peripheral polyneuropathy pain (Dosage Equivalence Verified)", hospital: "Kaveri Neurology" }
+        ],
+        alertsTriggered: [],
+        reportsAdded: [
+          { id: "rep-neuro-slip", title: "Kaveri Neuro Handwritten Prescription Pad (150mg)", type: "slip-neuro", hospital: "Kaveri Institute of Neurosciences", date: "29-Oct-2026", result: "Diabetic Peripheral Polyneuropathy, burning feet syndrome, Pregabalin 150mg HS prescribed" }
+        ],
+        notes: "Doctor wrote Pregabalin 150mg. Patient scans TWO 75mg strips. AI computes 75mg + 75mg = 150mg (Dosage Equivalent)."
+      },
+      {
+        id: 5,
+        title: "Step 5: Sri Murugan Spine Clinic",
+        tier: "Clinic #1 Handwritten + Scan",
+        clinic: "Sri Murugan Orthopaedic & Spine Clinic",
+        doctor: "Dr. R. Natarajan, D.Ortho, M.Ch (Ortho), Reg: TN-MCI-28941",
+        type: "imaging",
+        pills: [],
+        alertsTriggered: [],
+        reportsAdded: [
+          { id: "rep-knee-xray", title: "Bilateral Knee AP Digital X-Ray Soft Copy", type: "dicom-knee", hospital: "Murugan Imaging Centre", date: "29-Oct-2026", result: "Bilateral Knee Osteoarthritis Kellgren-Lawrence Grade III (Medial compartment joint space loss & subchondral sclerosis)", imgUrl: "https://upload.wikimedia.org/wikipedia/commons/e/e4/Knee_osteoarthritis_X-ray.jpg" },
+          { id: "rep-spine-mri", title: "Brain & Lumbar Spine T2 MRI Soft Copy", type: "dicom-mri", hospital: "Metro Multi-Slice Imaging", date: "29-Oct-2026", result: "L4-L5 posterior disc protrusion encroaching thecal sac and exit roots", imgUrl: "https://upload.wikimedia.org/wikipedia/commons/5/5f/Hirnmetastase_MRT-T1_KM.jpg" }
+        ],
+        notes: "Adds Bilateral Knee X-Ray & Lumbar MRI soft copies."
+      },
+      {
+        id: 6,
+        title: "Step 6: Sai Chest Polyclinic",
+        tier: "Clinic #2 Handwritten + Scan",
+        clinic: "Sai Chest & Allergy Polyclinic",
+        doctor: "Dr. T. Suresh Kumar, MD (Pulm), FCCP, Reg: TN-MCI-39820",
+        type: "imaging-sedation",
+        pills: [
+          { id: "montair", name: "Montair LC", salt: "Montelukast 10mg + Levocetirizine 5mg", timing: "night", scheduleStr: "0 - 0 - 1", purpose: "Allergic bronchitis & nocturnal wheeze", hospital: "Sai Chest Polyclinic", collidesWith: "pregabid", quarantineReason: "Severe CNS Depression & Nocturnal Fall Risk: Pregabid 150mg + Montair LC (Levocetirizine). In a 62-year-old chronic illness patient, combination causes severe ataxia, nocturnal confusion, and catastrophic fall risk." }
+        ],
+        alertsTriggered: [
+          {
+            id: "alert-cns-sedation",
+            severity: "high",
+            title: "CRITICAL ALERT #4: CNS SEDATION & FALL RISK (Pregabalin 150mg + Montair LC)",
+            desc: "Sai Chest Polyclinic prescribed Montair LC (Levocetirizine + Montelukast) at bedtime. When co-administered with Step 4's Pregabalin 150mg in a 62-year-old patient, additive central nervous system depression multiplies nocturnal fall, ataxia, and catastrophic trauma risk by 340%!",
+            action: "Bedtime doses staggered or daytime non-sedating antihistamine substituted.",
+            drugs: ["Pregabalin 150mg (Kaveri Neuro)", "Montair LC (Sai Chest)"]
+          }
+        ],
+        reportsAdded: [
+          { id: "rep-chest-xray", title: "Chest PA Digital X-Ray Soft Copy", type: "dicom-chest", hospital: "Sai Chest Imaging", date: "30-Oct-2026", result: "Digital Chest PA Soft Copy: CTR ~0.52 consistent with chronic hypertension; lungs clear of active infiltration", imgUrl: "https://upload.wikimedia.org/wikipedia/commons/c/c8/Chest_Xray_PA_3-8-2010.png" }
+        ],
+        notes: "⚡ TRIGGERS REAL-TIME ALERT #4 (CNS Sedation & Fall Risk: Pregabalin + Montair LC)!"
+      }
+    ];
+
+    // --- COMPONENT: REALISTIC BLISTER STRIP THUMBNAIL (VISUAL PILL RECOGNITION) ---
+    const PillVisualThumbnail = ({ pillId, onClick, isQuarantined = false }) => {
+      const visual = PILL_VISUAL_MAP[pillId] || {
+        foilType: "silver",
+        blisterBg: "from-slate-200 to-slate-400",
+        pillColor: "#ffffff",
+        pillShape: "round",
+        pocketCount: 6,
+        stripLabel: "TAB"
+      };
+
+      return (
+        <button
+          type="button"
+          onClick={onClick}
+          title="Click to zoom visual blister strip"
+          className="relative group flex-shrink-0 cursor-pointer focus:outline-none transition-transform active:scale-95"
+        >
+          {/* Micro blister strip container */}
+          <div className={`w-12 h-10 rounded-lg p-1 shadow-sm border border-slate-300 flex flex-col justify-between overflow-hidden bg-gradient-to-br ${visual.blisterBg} relative ${isQuarantined ? "opacity-60 grayscale" : ""}`}>
+            {/* Metallic foil reflection line */}
+            <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/40 to-transparent -rotate-45 pointer-events-none"></div>
+
+            {/* Pockets Row */}
+            <div className="grid grid-cols-3 gap-0.5 z-10">
+              {Array.from({ length: 6 }).map((_, i) => (
+                <div
+                  key={i}
+                  className={`w-2.5 h-2 rounded-sm border border-black/20 shadow-inner flex items-center justify-center ${
+                    visual.pillShape === "capsule" || visual.pillShape === "dual-capsule" ? "rounded-full" : "rounded-sm"
+                  }`}
+                  style={{ backgroundColor: visual.pillColor }}
+                >
+                  <span className="w-1 h-0.5 bg-white/40 rounded-full block"></span>
+                </div>
+              ))}
+            </div>
+
+            {/* Bottom Micro Print */}
+            <div className="z-10 flex items-center justify-between text-[6px] font-mono font-black text-slate-800 leading-none">
+              <span className="truncate max-w-[34px]">{visual.stripLabel}</span>
+              <Icon name="eye" className="w-2 h-2 text-slate-700 opacity-70 group-hover:opacity-100" />
+            </div>
+          </div>
+
+          {/* Quarantined cross tag */}
+          {isQuarantined && (
+            <span className="absolute -top-1 -right-1 bg-red-600 text-white text-[7px] font-bold px-1 rounded-full shadow-xs">
+              ✕
+            </span>
+          )}
+        </button>
+      );
+    };
+
+    // --- REAL PHOTOGRAPHIC MEDICAL RADIOGRAPHS RESTORED (DICOM VIEWPORT) ---
+    // Photographic X-Ray, MRI, and CT DICOM soft copies are directly rendered via authentic image URLs with object-contain.
+
+    // --- MAIN REACT APPLICATION COMPONENT ---
+    function MedPulseApp() {
+      // Current Screen: 1 (Aadhaar Authentication) -> 2 (Main Application)
+      const [currentScreen, setCurrentScreen] = useState(1);
+
+      // Screen 1: Aadhaar Input & OTP State
+      const [aadhaarInput, setAadhaarInput] = useState("");
+      const [otpInput, setOtpInput] = useState("");
+      const [isOtpSent, setIsOtpSent] = useState(false);
+      const [isVerifyingAadhaar, setIsVerifyingAadhaar] = useState(false);
+      const [aadhaarError, setAadhaarError] = useState("");
+
+      // Language state: Only 'en' | 'ta' | 'hi'
+      const [lang, setLang] = useState("en");
+      const t = i18n[lang] || i18n.en;
+
+      // Active Bottom Navigation Tab in Screen 2: 'info' | 'followups' | 'scanner' | 'reports' | 'monitor'
+      const [activeTab, setActiveTab] = useState("info");
+
+      // Progressive Step Upload State (0 Prescriptions Loaded Clean State)
+      const [loadedSteps, setLoadedSteps] = useState([]);
+      const [stepProgressMap, setStepProgressMap] = useState({});
+
+      // Auto-Hiding Translucent Simulator Overlay (`⚡ Sim`)
+      const [showSimBar, setShowSimBar] = useState(true);
+      const [simCountdown, setSimCountdown] = useState(4);
+      const simTimerRef = useRef(null);
+
+      // Patient Profile: THIRU. KRISHNA SWAMY, AGE 62, MALE, O+VE
+      const [patient, setPatient] = useState({
+        name: "Thiru. Krishna Swamy",
+        age: 62,
+        gender: "Male",
+        bloodGroup: "O+ve",
+        phoneMasked: "+91 98422 XXXXX",
+        rawPhone: "+91 98422 41098",
+        caregiver: "Ramesh Swamy (Son)",
+        caregiverPhone: "+91 98422 11223",
+        aadhaarStatus: "Verified • [Aadhaar Redacted]",
+        avatar: "https://images.unsplash.com/photo-1558222218-b7b54eede3f3?auto=format&fit=crop&w=256&q=80"
+      });
+
+      // Pill Lock State (Tap to Lock double-dose prevention)
+      const [lockedPills, setLockedPills] = useState({});
+
+      // Tab 1: Visual Pill Matcher Zoom Modal State
+      const [activeVisualPill, setActiveVisualPill] = useState(null);
+
+      // Tab 2: Doctor-Specific Realistic Calendar State
+      const [selectedDoctorId, setSelectedDoctorId] = useState("dr-senthil");
+      const activeDoctor = useMemo(() => {
+        return DOCTORS_LIST.find(d => d.id === selectedDoctorId) || DOCTORS_LIST[0];
+      }, [selectedDoctorId]);
+
+      // Selected calendar day (defaults to the first open day for that doctor)
+      const [selectedCalendarDay, setSelectedCalendarDay] = useState(30);
+
+      // Update selected day whenever doctor changes to match their waitlist
+      useEffect(() => {
+        setSelectedCalendarDay(activeDoctor.waitDays);
+      }, [activeDoctor]);
+
+      // Modals State
+      const [showProfileModal, setShowProfileModal] = useState(false);
+      const [showQrModal, setShowQrModal] = useState(false);
+      const [showEmergencyMenu, setShowEmergencyMenu] = useState(false);
+      const [showWhatsAppModal, setShowWhatsAppModal] = useState(false);
+      const [activeReportModal, setActiveReportModal] = useState(null);
+      const [activeEmergencyAlert, setActiveEmergencyAlert] = useState(null);
+
+      // Tab 3 Scanner State (Supports Multi-Tablet Equivalence in Step 4)
+      const [scannerView, setScannerView] = useState("prescription"); // 'prescription' | 'strip'
+      const [scannerStep, setScannerStep] = useState(4); // Default to Step 4 to highlight Multi-Tablet feature!
+
+      // PACS Lightbox Settings
+      const [pacsBrightness, setPacsBrightness] = useState(100);
+      const [pacsContrast, setPacsContrast] = useState(100);
+      const [pacsInvert, setPacsInvert] = useState(false);
+
+      // Auto-Hide Simulation Overlay Timer
+      useEffect(() => {
+        if (!showSimBar) return;
+        setSimCountdown(4);
+
+        if (simTimerRef.current) clearInterval(simTimerRef.current);
+        simTimerRef.current = setInterval(() => {
+          setSimCountdown((prev) => {
+            if (prev <= 1) {
+              clearInterval(simTimerRef.current);
+              setShowSimBar(false);
+              return 0;
+            }
+            return prev - 1;
+          });
+        }, 1000);
+
+        return () => {
+          if (simTimerRef.current) clearInterval(simTimerRef.current);
+        };
+      }, [showSimBar, loadedSteps.length]);
+
+      // Native Speech Synthesis with Indian Accents
+      const speak = (text) => {
+        if (!('speechSynthesis' in window)) return;
+        window.speechSynthesis.cancel();
+        const utterance = new SpeechSynthesisUtterance(text);
+        if (lang === "ta") utterance.lang = "ta-IN";
+        else if (lang === "hi") utterance.lang = "hi-IN";
+        else utterance.lang = "en-IN";
+        utterance.rate = 0.95;
+        window.speechSynthesis.speak(utterance);
+      };
+
+      // Web Audio API Emergency Siren
+      const playEmergencyBeep = () => {
+        try {
+          const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+          const osc = audioCtx.createOscillator();
+          const gain = audioCtx.createGain();
+          osc.type = "sawtooth";
+          osc.frequency.setValueAtTime(880, audioCtx.currentTime);
+          osc.frequency.exponentialRampToValueAtTime(440, audioCtx.currentTime + 0.5);
+          gain.gain.setValueAtTime(0.3, audioCtx.currentTime);
+          gain.gain.linearRampToValueAtTime(0.01, audioCtx.currentTime + 0.5);
+          osc.connect(gain);
+          gain.connect(audioCtx.destination);
+          osc.start();
+          osc.stop(audioCtx.currentTime + 0.5);
+        } catch (e) {
+          console.warn("Audio Context blocked:", e);
+        }
+      };
+
+      // Aadhaar Format Helper
+      const handleAadhaarChange = (e) => {
+        const raw = e.target.value.replace(/\D/g, "").slice(0, 12);
+        const formatted = raw.replace(/(\d{4})(?=\d)/g, "$1 ");
+        setAadhaarInput(formatted);
+        setAadhaarError("");
+      };
+
+      // Screen 1: Judge Fast-Pass Bypass
+      const handleJudgeFastPass = () => {
+        setIsVerifyingAadhaar(true);
+        setAadhaarInput("5489 3102 9841");
+        setOtpInput("774102");
+        setTimeout(() => {
+          setIsVerifyingAadhaar(false);
+          setCurrentScreen(2);
+          speak("Identity verified via Aadhaar e-KYC. Welcome to MedPulse, Thiru Krishna Swamy.");
+        }, 650);
+      };
+
+      // Screen 1: Normal Verification
+      const handleVerifyAadhaar = () => {
+        const raw = aadhaarInput.replace(/\s/g, "");
+        if (raw.length !== 12) {
+          setAadhaarError("Please enter a valid 12-digit Aadhaar number");
+          return;
+        }
+        if (!isOtpSent) {
+          setIsOtpSent(true);
+          return;
+        }
+        if (otpInput.length < 4) {
+          setAadhaarError("Please enter the 6-digit OTP");
+          return;
+        }
+        setIsVerifyingAadhaar(true);
+        setTimeout(() => {
+          setIsVerifyingAadhaar(false);
+          setCurrentScreen(2);
+          speak("Identity verified via Aadhaar. Welcome to MedPulse.");
+        }, 800);
+      };
+
+      // Progressive Hospital Upload Toggle
+      const triggerHospitalUpload = (stepId) => {
+        setShowSimBar(true);
+        const targetStep = HOSPITAL_STEPS.find(s => s.id === stepId);
+        if (!targetStep) return;
+
+        if (loadedSteps.includes(stepId)) {
+          // Unload step
+          setLoadedSteps(prev => prev.filter(id => id !== stepId));
+          setStepProgressMap(prev => {
+            const next = { ...prev };
+            delete next[stepId];
+            return next;
+          });
+          speak(`Unloaded ${targetStep.clinic}`);
+          return;
+        }
+
+        // Upload Step with 2-Stage Cross-Verification
+        setStepProgressMap(prev => ({
+          ...prev,
+          [stepId]: { stage1: true, stage2: !targetStep.requiresCrossVerification }
+        }));
+        setLoadedSteps(prev => [...prev, stepId]);
+
+        // Trigger Alerts if any
+        if (targetStep.alertsTriggered && targetStep.alertsTriggered.length > 0) {
+          playEmergencyBeep();
+          const firstAlert = targetStep.alertsTriggered[0];
+          setActiveEmergencyAlert(firstAlert);
+          speak(`Warning! ${firstAlert.title}`);
+        } else {
+          speak(`${targetStep.clinic} prescriptions synchronized successfully.`);
+        }
+      };
+
+      // Confirm Step 2 Verification for Step 3 & Step 4
+      const confirmStage2Verification = (stepId) => {
+        setStepProgressMap(prev => ({
+          ...prev,
+          [stepId]: { ...prev[stepId], stage2: true }
+        }));
+        speak("Physical tablet blister strip confirmed. Cross-verification complete.");
+      };
+
+      // Aggregate All Active Pills & Quarantine Filter
+      const allPills = useMemo(() => {
+        let pills = [];
+        loadedSteps.forEach(id => {
+          const step = HOSPITAL_STEPS.find(s => s.id === id);
+          if (step && step.pills) {
+            pills = [...pills, ...step.pills];
+          }
+        });
+        return pills;
+      }, [loadedSteps]);
+
+      // Aggregate All Active Reports
+      const allReports = useMemo(() => {
+        let reports = [];
+        loadedSteps.forEach(id => {
+          const step = HOSPITAL_STEPS.find(s => s.id === id);
+          if (step && step.reportsAdded) {
+            reports = [...reports, ...step.reportsAdded];
+          }
+        });
+        return reports;
+      }, [loadedSteps]);
+
+      // Aggregate All Alerts
+      const activeAlerts = useMemo(() => {
+        let alerts = [];
+        loadedSteps.forEach(id => {
+          const step = HOSPITAL_STEPS.find(s => s.id === id);
+          if (step && step.alertsTriggered) {
+            alerts = [...alerts, ...step.alertsTriggered];
+          }
+        });
+        return alerts;
+      }, [loadedSteps]);
+
+      // Toggle Pill Lock (Tap-to-lock double dose prevention)
+      const togglePillLock = (pillId) => {
+        const now = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+        setLockedPills(prev => {
+          const next = { ...prev };
+          if (next[pillId]) {
+            delete next[pillId];
+            speak("Dose unlocked.");
+          } else {
+            next[pillId] = now;
+            speak("Dose taken and locked. Double-dose safety shield active.");
+          }
+          return next;
+        });
+      };
+
+      return (
+        /* MANDATORY PHONE SHELL (max-w-[430px] mx-auto min-h-screen bg-white shadow-2xl relative flex flex-col) */
+        <div className="min-h-screen w-full max-w-[430px] mx-auto bg-white shadow-2xl border-x border-slate-200 flex flex-col relative">
+
+          {/* =========================================================================
+              SCREEN 1: AADHAAR AUTHENTICATION (MANDATORY ENTRY GATEWAY)
+              ========================================================================= */}
+          {currentScreen === 1 && (
+            <div className="flex-1 w-full p-6 flex flex-col justify-between animate-in fade-in duration-300">
+              <div className="space-y-6 pt-4 text-center">
+                {/* Government Emblem / MedPulse Shield Logo */}
+                <div className="w-16 h-16 rounded-3xl bg-gradient-to-tr from-blue-700 to-indigo-600 text-white flex items-center justify-center mx-auto shadow-xl shadow-blue-500/25 ring-4 ring-blue-50">
+                  <Icon name="shield-check" className="w-9 h-9" />
+                </div>
+
+                <div className="space-y-1">
+                  <span className="text-[10px] font-black uppercase tracking-widest text-blue-700 bg-blue-50 px-2.5 py-1 rounded-full border border-blue-200">
+                    UIDAI Verified e-KYC
+                  </span>
+                  <h1 className="text-2xl font-black text-slate-900 tracking-tight">
+                    {t.aadhaarTitle}
+                  </h1>
+                  <p className="text-xs text-slate-500 max-w-xs mx-auto">
+                    {t.aadhaarSubtitle}
+                  </p>
+                </div>
+
+                {/* Language Switcher on Screen 1 */}
+                <div className="inline-flex rounded-full bg-slate-100 p-1 border border-slate-200 shadow-inner">
+                  {["en", "ta", "hi"].map((l) => (
+                    <button
+                      key={l}
+                      onClick={() => setLang(l)}
+                      className={`px-3 py-1 rounded-full text-xs font-bold transition-all ${
+                        lang === l ? "bg-white text-blue-700 shadow-sm" : "text-slate-500 hover:text-slate-900"
+                      }`}
+                    >
+                      {l === "en" ? "EN" : l === "ta" ? "தமிழ்" : "हिंदी"}
+                    </button>
+                  ))}
+                </div>
+
+                {/* Aadhaar Input Field */}
+                <div className="space-y-4 pt-2 text-left">
+                  <div>
+                    <label className="block text-xs font-extrabold text-slate-700 mb-1.5 flex items-center justify-between">
+                      <span>12-Digit Aadhaar Number</span>
+                      <span className="text-[10px] font-normal text-slate-400">UID / VID</span>
+                    </label>
+                    <div className="relative">
+                      <input
+                        type="text"
+                        inputMode="numeric"
+                        value={aadhaarInput}
+                        onChange={handleAadhaarChange}
+                        placeholder="XXXX-XXXX-XXXX"
+                        maxLength={14}
+                        className="w-full text-lg font-mono font-bold tracking-widest px-4 py-3 rounded-2xl border-2 border-slate-200 focus:border-blue-600 focus:outline-none transition-colors bg-slate-50 text-slate-900 shadow-inner"
+                      />
+                      <div className="absolute right-3.5 top-3.5 text-slate-400">
+                        <Icon name="id-card" className="w-5 h-5" />
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* OTP Field (Conditionally Revealed) */}
+                  {isOtpSent && (
+                    <div className="space-y-1.5 animate-in slide-in-from-top-2 duration-300">
+                      <label className="block text-xs font-extrabold text-slate-700">
+                        {t.otpPrompt}
+                      </label>
+                      <input
+                        type="text"
+                        inputMode="numeric"
+                        value={otpInput}
+                        onChange={(e) => setOtpInput(e.target.value.slice(0, 6))}
+                        placeholder="••••••"
+                        maxLength={6}
+                        className="w-full text-center text-xl font-mono font-extrabold tracking-widest px-4 py-2.5 rounded-2xl border-2 border-blue-400 bg-blue-50/50 text-blue-900 focus:outline-none"
+                      />
+                    </div>
+                  )}
+
+                  {aadhaarError && (
+                    <p className="text-xs font-bold text-red-600 flex items-center gap-1">
+                      <Icon name="alert-triangle" className="w-4 h-4" />
+                      <span>{aadhaarError}</span>
+                    </p>
+                  )}
+
+                  {/* Verify Action Button */}
+                  <button
+                    onClick={handleVerifyAadhaar}
+                    disabled={isVerifyingAadhaar}
+                    className="w-full py-3.5 rounded-2xl bg-blue-600 hover:bg-blue-700 text-white font-extrabold text-sm shadow-lg shadow-blue-500/25 active:scale-98 transition-all flex items-center justify-center gap-2"
+                  >
+                    {isVerifyingAadhaar ? (
+                      <span className="animate-spin rounded-full h-4 w-4 border-2 border-white border-t-transparent"></span>
+                    ) : (
+                      <>
+                        <span>{isOtpSent ? t.verifyBtn : "Send OTP to Mobile"}</span>
+                        <Icon name="check" className="w-4 h-4" />
+                      </>
+                    )}
+                  </button>
+                </div>
+              </div>
+
+              {/* JUDGE'S 1-CLICK FAST-PASS BUTTON */}
+              <div className="space-y-3 pt-6 border-t border-slate-100">
+                <button
+                  type="button"
+                  onClick={handleJudgeFastPass}
+                  className="w-full py-3.5 rounded-2xl bg-gradient-to-r from-amber-500 via-orange-500 to-amber-600 hover:from-amber-600 hover:to-orange-600 text-slate-950 font-black text-xs uppercase tracking-wider shadow-md shadow-amber-500/20 active:scale-98 transition-all flex items-center justify-center gap-2 border border-amber-300"
+                >
+                  <Icon name="zap" className="w-4 h-4 fill-slate-950" />
+                  <span>{t.fastPassBtn}</span>
+                </button>
+                <div className="flex items-center justify-center space-x-1.5 text-[10px] text-slate-400 font-medium">
+                  <Icon name="lock" className="w-3 h-3 text-slate-400" />
+                  <span>256-Bit Govt. Health Stack Encrypted</span>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* =========================================================================
+              SCREEN 2: MAIN APP & TOP NAVIGATION BAR (ONLY ACTIVE WHEN LOGGED IN)
+              ========================================================================= */}
+          {currentScreen === 2 && (
+            <>
+              {/* Sticky Top App Bar (`sticky top-0 z-30`) */}
+              <header className="px-3 py-2.5 flex items-center justify-between gap-1.5 bg-white/95 backdrop-blur-sm border-b border-slate-100 sticky top-0 z-30">
+                {/* Left: MedPulse Brand + Age Badge */}
+                <div className="flex items-center space-x-2">
+                  <div className="w-8 h-8 rounded-xl bg-gradient-to-tr from-blue-700 to-indigo-600 text-white flex items-center justify-center shadow-md">
+                    <Icon name="activity" className="w-4 h-4" />
+                  </div>
+                  <div>
+                    <h1 className="text-xs font-black tracking-tight text-slate-900 leading-none">
+                      {t.appName}
+                    </h1>
+                    <span className="text-[9px] font-bold text-slate-400 leading-none">
+                      Age 62 • Male
+                    </span>
+                  </div>
+                </div>
+
+                {/* Center: Language Selector (English, Tamil, Hindi ONLY) */}
+                <div className="inline-flex rounded-full bg-slate-100 p-0.5 border border-slate-200">
+                  {["en", "ta", "hi"].map((l) => (
+                    <button
+                      key={l}
+                      onClick={() => setLang(l)}
+                      className={`px-2 py-0.5 rounded-full text-[10px] font-bold transition-all ${
+                        lang === l ? "bg-white text-blue-700 shadow-xs" : "text-slate-500 hover:text-slate-800"
+                      }`}
+                    >
+                      {l === "en" ? "EN" : l === "ta" ? "தமிழ்" : "हिंदी"}
+                    </button>
+                  ))}
+                </div>
+
+                {/* Right: Simulation Drawer Button & 3-Dot Emergency Menu */}
+                <div className="flex items-center space-x-1">
+                  <button
+                    onClick={() => setShowSimBar(prev => !prev)}
+                    className="px-2 py-1 rounded-xl bg-blue-50 border border-blue-200 text-blue-700 text-[10px] font-black flex items-center gap-1 active:scale-95"
+                  >
+                    <Icon name="zap" className="w-3 h-3 fill-blue-600" />
+                    <span>⚡ Sim ({loadedSteps.length}/6)</span>
+                  </button>
+
+                  <button
+                    onClick={() => setShowEmergencyMenu(true)}
+                    className="p-1 rounded-lg text-slate-500 hover:text-slate-800 hover:bg-slate-100 transition-colors"
+                    title="Emergency Caregiver Quick Sheet"
+                  >
+                    <Icon name="dots-vertical" className="w-5 h-5" />
+                  </button>
+                </div>
+              </header>
+
+              {/* =========================================================================
+                  TRANSLUCENT PROGRESSIVE SIMULATION BAR (AUTOHIDES IN 4s)
+                  ========================================================================= */}
+              <div
+                className={`fixed top-12 left-1/2 -translate-x-1/2 z-50 w-[94%] max-w-[400px] rounded-2xl bg-slate-900/90 backdrop-blur-md border border-white/20 p-3 shadow-2xl transition-all duration-500 ${
+                  showSimBar ? "opacity-100 translate-y-0 pointer-events-auto" : "opacity-0 -translate-y-4 pointer-events-none"
+                }`}
+                onMouseEnter={() => setShowSimBar(true)}
+              >
+                <div className="flex items-center justify-between pb-1.5 border-b border-white/15">
+                  <div className="flex items-center space-x-1.5">
+                    <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping"></span>
+                    <span className="text-[11px] font-bold text-white tracking-wide">
+                      {t.simTitle}
+                    </span>
+                  </div>
+                  <div className="flex items-center space-x-2">
+                    <span className="text-[9px] font-mono text-slate-300">
+                      {t.simHideIn}: <strong className="text-amber-400">{simCountdown}s</strong>
+                    </span>
+                    <button
+                      onClick={() => {
+                        setLoadedSteps([]);
+                        setStepProgressMap({});
+                        setLockedPills({});
+                        speak("Simulation reset to clean state.");
+                      }}
+                      className="text-[9px] font-bold text-red-300 hover:text-white underline"
+                    >
+                      {t.resetAll}
+                    </button>
+                  </div>
+                </div>
+
+                {/* 6 Step-by-Step Upload Buttons */}
+                <div className="grid grid-cols-3 gap-1.5 mt-2">
+                  {HOSPITAL_STEPS.map((step) => {
+                    const isLoaded = loadedSteps.includes(step.id);
+                    return (
+                      <button
+                        key={step.id}
+                        type="button"
+                        onClick={() => triggerHospitalUpload(step.id)}
+                        className={`p-1.5 rounded-xl text-left border transition-all text-[10px] ${
+                          isLoaded
+                            ? "bg-blue-600/90 border-blue-400 text-white font-black shadow-xs"
+                            : "bg-slate-800/80 border-slate-700 text-slate-300 hover:bg-slate-700/80"
+                        }`}
+                      >
+                        <div className="flex items-center justify-between">
+                          <span className="font-bold">Step {step.id}</span>
+                          {isLoaded && <span className="text-emerald-300">✓</span>}
+                        </div>
+                        <p className="truncate text-[9px] font-normal text-slate-200">
+                          {step.clinic.split("-")[0].replace("Hospital", "").replace("Clinic", "").trim()}
+                        </p>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {/* =========================================================================
+                  CRITICAL ARCHITECTURE: SCROLLABLE MAIN CONTENT (pb-36 Clearance)
+                  ========================================================================= */}
+              <main className="flex-1 w-full overflow-y-auto px-4 pt-3 pb-36 space-y-5">
+                
+                {/* ---------------------------------------------------------------------
+                    TAB 1: INFO (VISUAL PILL RECOGNITION, PROFILE & DAILY SCHEDULE)
+                    --------------------------------------------------------------------- */}
+                {activeTab === "info" && (
+                  <div className="space-y-4">
+                    {/* Patient Profile Card (Thiru. Krishna Swamy, Age 62, Male, O+ve) */}
+                    <div className="rounded-2xl bg-gradient-to-br from-slate-900 via-slate-800 to-blue-950 p-4 text-white shadow-lg relative overflow-hidden">
+                      <div className="absolute top-0 right-0 w-32 h-32 bg-blue-500/10 rounded-full blur-2xl pointer-events-none"></div>
+
+                      <div className="flex items-start justify-between relative z-10">
+                        <div className="flex items-center space-x-3">
+                          <div className="relative">
+                            <img
+                              src={patient.avatar}
+                              alt="Patient Portrait"
+                              onError={(e) => {
+                                e.target.style.display = 'none';
+                                e.target.nextSibling.style.display = 'flex';
+                              }}
+                              className="w-14 h-14 rounded-2xl object-cover border-2 border-white/20 shadow-md"
+                            />
+                            <div className="hidden w-14 h-14 rounded-2xl bg-blue-600 text-white font-bold text-lg items-center justify-center border-2 border-white/20">
+                              KS
+                            </div>
+                            <span className="absolute -bottom-1 -right-1 w-4 h-4 bg-emerald-500 border-2 border-slate-900 rounded-full"></span>
+                          </div>
+                          <div>
+                            <div className="flex items-center gap-1.5">
+                              <h2 className="text-base font-extrabold tracking-tight">{patient.name}</h2>
+                              <span className="text-[10px] font-bold px-1.5 py-0.2 bg-blue-500/30 text-blue-200 border border-blue-400/30 rounded">
+                                {patient.bloodGroup}
+                              </span>
+                            </div>
+                            <p className="text-xs text-slate-300 font-medium">
+                              Age: <span className="font-bold text-white">{patient.age} Years</span> • Sex: <span className="font-bold text-white">{patient.gender}</span>
+                            </p>
+                            <p className="text-[11px] text-slate-400 flex items-center gap-1 mt-0.5">
+                              <Icon name="phone" className="w-3 h-3 text-slate-400" />
+                              <span>Caregiver: <strong className="text-slate-200 font-mono">{patient.phoneMasked}</strong></span>
+                            </p>
+                            <div className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 text-[9px] font-bold mt-1">
+                              <Icon name="shield-check" className="w-3 h-3 text-emerald-400" />
+                              <span>{patient.aadhaarStatus}</span>
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* Edit Profile Button */}
+                        <button
+                          onClick={() => setShowProfileModal(true)}
+                          className="flex items-center gap-1 px-2 py-1 rounded-lg bg-white/10 hover:bg-white/20 text-white text-[10px] font-bold transition-colors"
+                          title={t.editProfile}
+                        >
+                          <Icon name="edit" className="w-3 h-3" />
+                          <span>Edit</span>
+                        </button>
+                      </div>
+
+                      {/* Unified QR Code Card with Interactive Doctor Scan Simulation */}
+                      <div className="mt-3.5 p-3 rounded-2xl bg-white/10 border border-white/15 flex flex-col items-center justify-center text-center space-y-2">
+                        <div className="flex items-center justify-between w-full">
+                          <div className="flex items-center space-x-2.5 text-left">
+                            <div className="p-1.5 bg-white text-slate-900 rounded-lg shadow-sm">
+                              <Icon name="qr" className="w-5 h-5" />
+                            </div>
+                            <div>
+                              <p className="text-xs font-bold text-white flex items-center gap-1">
+                                {t.unifiedQr}
+                              </p>
+                              <p className="text-[10px] text-slate-300 font-normal">
+                                {t.qrSubtext}
+                              </p>
+                            </div>
+                          </div>
+                          <button
+                            onClick={() => setShowQrModal(true)}
+                            className="text-[10px] font-bold text-blue-300 bg-blue-500/20 px-2 py-1 rounded-lg hover:bg-blue-500/30 transition-colors"
+                          >
+                            Expand
+                          </button>
+                        </div>
+
+                        {/* Interactive Dynamic QR Code Image */}
+                        <div className="pt-1 flex flex-col items-center w-full">
+                          <div className="p-2 bg-white rounded-xl shadow-lg border border-slate-200 inline-block">
+                            <img
+                              src="https://api.qrserver.com/v1/create-qr-code/?size=150x150&data=MEDPULSE-IN-2026-KS62-REPORTS"
+                              alt="Unified Patient QR Code"
+                              onClick={() => {
+                                setActiveTab('reports');
+                                speak("Doctor scanned Patient QR. Navigating directly to verified diagnostic reports.");
+                              }}
+                              className="w-32 h-32 object-contain rounded-lg cursor-pointer hover:opacity-80 transition-opacity"
+                            />
+                          </div>
+
+                          {/* Simulation Button for Judges */}
+                          <button 
+                            onClick={() => {
+                              setActiveTab('reports');
+                              speak("Doctor scanned Patient QR. Navigating directly to verified diagnostic reports.");
+                            }} 
+                            className="mt-3 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold rounded-xl flex items-center justify-center gap-2 shadow-md w-full transition-all active:scale-98"
+                          >
+                            📱 Simulate Doctor Scan → Opens Reports
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Active Collision Alert Banner */}
+                    {activeAlerts.length > 0 && (
+                      <div className="rounded-2xl p-3 bg-red-600 text-white shadow-md flex items-center justify-between animate-pulse">
+                        <div className="flex items-center space-x-2.5">
+                          <Icon name="shield-alert" className="w-5 h-5 flex-shrink-0" />
+                          <div>
+                            <p className="text-xs font-black uppercase tracking-tight">
+                              {activeAlerts.length} {t.alertBanner}
+                            </p>
+                            <p className="text-[10px] opacity-90 line-clamp-1">
+                              {activeAlerts[activeAlerts.length - 1].title}
+                            </p>
+                          </div>
+                        </div>
+                        <button
+                          onClick={() => setActiveTab("monitor")}
+                          className="px-2.5 py-1 rounded-lg bg-white text-red-700 font-black text-[10px] shadow-sm flex-shrink-0"
+                        >
+                          Review
+                        </button>
+                      </div>
+                    )}
+
+                    {/* Clean State Empty Indicator */}
+                    {loadedSteps.length === 0 && (
+                      <div className="rounded-2xl border-2 border-dashed border-slate-300 p-8 text-center bg-slate-50 space-y-2">
+                        <Icon name="pill" className="w-10 h-10 text-slate-300 mx-auto" />
+                        <h3 className="text-xs font-bold text-slate-700">0 Prescriptions Loaded (Clean State)</h3>
+                        <p className="text-[11px] text-slate-500 max-w-xs mx-auto">
+                          Tap <strong>"⚡ Sim (0/6)"</strong> at the top to upload Step 1 through Step 6 hospital prescriptions one-by-one to test live collision detection and schedule building.
+                        </p>
+                        <button
+                          onClick={() => triggerHospitalUpload(1)}
+                          className="mt-2 px-3 py-1.5 rounded-xl bg-blue-600 text-white text-xs font-bold shadow-sm"
+                        >
+                          Load Step 1 (KMCH Nephrology)
+                        </button>
+                      </div>
+                    )}
+
+                    {/* TIMING SECTIONS: Morning ☀️ | Lunch 🌤️ | Night 🌙 WITH VISUAL PILL RECOGNITION */}
+                    {["morning", "lunch", "night"].map((timeSlot) => {
+                      const slotPills = allPills.filter(p => p.timing === timeSlot);
+                      if (slotPills.length === 0 && loadedSteps.length > 0) return null;
+                      if (loadedSteps.length === 0) return null;
+
+                      const slotTitle = timeSlot === "morning" ? t.morning : timeSlot === "lunch" ? t.lunch : t.night;
+                      const slotIcon = timeSlot === "morning" ? "☀️" : timeSlot === "lunch" ? "🌤️" : "🌙";
+
+                      return (
+                        <div key={timeSlot} className="space-y-2">
+                          <div className="flex items-center justify-between px-1">
+                            <span className="text-xs font-bold text-slate-700 flex items-center gap-1.5">
+                              <span>{slotIcon}</span>
+                              <span>{slotTitle}</span>
+                            </span>
+                            <span className="text-[10px] font-semibold text-slate-400">
+                              {slotPills.length} tablet{slotPills.length > 1 ? "s" : ""}
+                            </span>
+                          </div>
+
+                          <div className="space-y-2.5">
+                            {slotPills.map((pill) => {
+                              const isQuarantined = !!pill.quarantineReason;
+                              const isLocked = !!lockedPills[pill.id];
+
+                              return (
+                                <div
+                                  key={pill.id}
+                                  className={`rounded-2xl p-3 border transition-all relative ${
+                                    isQuarantined
+                                      ? "bg-red-50/95 border-red-300 shadow-xs"
+                                      : isLocked
+                                      ? "bg-emerald-50/70 border-emerald-300 shadow-xs"
+                                      : "bg-white border-slate-200 shadow-sm hover:border-blue-300"
+                                  }`}
+                                >
+                                  {isQuarantined ? (
+                                    /* Quarantined Pill Item */
+                                    <div className="space-y-2">
+                                      <div className="flex items-start justify-between gap-2">
+                                        <div className="flex items-center space-x-2.5">
+                                          {/* Blister strip thumbnail */}
+                                          <PillVisualThumbnail
+                                            pillId={pill.id}
+                                            isQuarantined={true}
+                                            onClick={() => setActiveVisualPill(pill)}
+                                          />
+                                          <div>
+                                            <p className="text-xs font-black text-red-900 line-through tracking-tight">
+                                              {pill.name}
+                                            </p>
+                                            <span className="text-[9px] font-extrabold text-red-700 uppercase bg-red-200/70 px-1.5 py-0.2 rounded">
+                                              {t.quarantinedTitle}
+                                            </span>
+                                          </div>
+                                        </div>
+                                        <span className="text-[9px] font-mono font-bold text-red-700 bg-red-100 px-2 py-0.5 rounded-full flex-shrink-0">
+                                          LOCKED OFF
+                                        </span>
+                                      </div>
+                                      <div className="p-2 rounded-xl bg-red-100/70 border border-red-200 text-[10px] text-red-800 font-medium">
+                                        <span className="font-bold">Collision Forensic:</span> {pill.quarantineReason}
+                                      </div>
+                                    </div>
+                                  ) : (
+                                    /* Normal Pill Item with Checkbox and Blister Strip Thumbnail */
+                                    <div className="space-y-2">
+                                      <div className="flex items-start justify-between gap-2">
+                                        <div className="flex items-start space-x-2.5">
+                                          {/* Checkbox */}
+                                          <button
+                                            onClick={() => togglePillLock(pill.id)}
+                                            className={`mt-1.5 w-6 h-6 rounded-lg flex items-center justify-center border transition-all flex-shrink-0 ${
+                                              isLocked
+                                                ? "bg-emerald-600 border-emerald-600 text-white shadow-sm"
+                                                : "border-slate-300 bg-white hover:border-blue-500 text-transparent"
+                                            }`}
+                                          >
+                                            <Icon name="check" className="w-4 h-4" />
+                                          </button>
+
+                                          {/* VISUAL PILL RECOGNITION THUMBNAIL (Next to Checkbox) */}
+                                          <PillVisualThumbnail
+                                            pillId={pill.id}
+                                            onClick={() => setActiveVisualPill(pill)}
+                                          />
+
+                                          <div>
+                                            <div className="flex items-center gap-1.5 flex-wrap">
+                                              <p className={`text-xs font-extrabold tracking-tight ${isLocked ? "line-through text-slate-500" : "text-slate-900"}`}>
+                                                {pill.name}
+                                              </p>
+                                              {pill.id === "pregabid" && (
+                                                <span className="text-[9px] font-black px-1.5 py-0.2 bg-emerald-100 text-emerald-800 rounded border border-emerald-300">
+                                                  2x 75mg = 150mg Equiv
+                                                </span>
+                                              )}
+                                            </div>
+                                            <p className="text-[10px] text-slate-500">
+                                              {pill.salt}
+                                            </p>
+                                            <p className="text-[10px] text-slate-600 font-semibold mt-0.5">
+                                              Dosage: <strong className="text-slate-900">{pill.scheduleStr}</strong> • {pill.purpose}
+                                            </p>
+                                          </div>
+                                        </div>
+
+                                        {/* Action: Read Aloud & Zoom */}
+                                        <div className="flex items-center space-x-1 flex-shrink-0">
+                                          <button
+                                            onClick={() => setActiveVisualPill(pill)}
+                                            className="p-1 rounded-md text-blue-600 bg-blue-50 hover:bg-blue-100"
+                                            title="Visual Match"
+                                          >
+                                            <Icon name="eye" className="w-3.5 h-3.5" />
+                                          </button>
+                                          <button
+                                            onClick={() => speak(`${pill.name}, ${pill.salt}. ${pill.purpose}`)}
+                                            className="p-1 rounded-md text-slate-400 hover:text-blue-600 hover:bg-blue-50"
+                                            title="Read Aloud"
+                                          >
+                                            <Icon name="volume-2" className="w-3.5 h-3.5" />
+                                          </button>
+                                        </div>
+                                      </div>
+
+                                      {/* Origin Badge & Taken Lock Status */}
+                                      <div className="flex items-center justify-between text-[10px] pt-1 border-t border-slate-100">
+                                        <span className="text-slate-400 font-medium">
+                                          Rx: <strong className="text-slate-600">{pill.hospital}</strong>
+                                        </span>
+                                        {isLocked ? (
+                                          <span className="flex items-center gap-1 font-bold text-emerald-700 bg-emerald-100/80 px-2 py-0.5 rounded-full">
+                                            <Icon name="lock" className="w-3 h-3" />
+                                            {t.takenLocked} ({lockedPills[pill.id]})
+                                          </span>
+                                        ) : (
+                                          <button
+                                            onClick={() => togglePillLock(pill.id)}
+                                            className="text-blue-600 hover:underline font-bold"
+                                          >
+                                            Tap box to confirm
+                                          </button>
+                                        )}
+                                      </div>
+                                    </div>
+                                  )}
+                                </div>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+
+                {/* ---------------------------------------------------------------------
+                    TAB 2: FOLLOW-UPS (DOCTOR-SPECIFIC REALISTIC CONTINUOUS CALENDAR)
+                    --------------------------------------------------------------------- */}
+                {activeTab === "followups" && (
+                  <div className="space-y-4">
+                    
+                    {/* 1. DOCTOR SELECTOR: HORIZONTAL SCROLLABLE TABS */}
+                    <div className="space-y-1.5 text-left">
+                      <span className="text-[11px] font-extrabold text-slate-700 uppercase tracking-wider flex items-center gap-1">
+                        <Icon name="calendar" className="w-3.5 h-3.5 text-blue-600" />
+                        {t.selectDoctor}
+                      </span>
+                      <div className="flex space-x-2 overflow-x-auto pb-1 no-scrollbar">
+                        {DOCTORS_LIST.map((doc) => {
+                          const isSelected = doc.id === activeDoctor.id;
+                          return (
+                            <button
+                              key={doc.id}
+                              onClick={() => {
+                                setSelectedDoctorId(doc.id);
+                                speak(`Viewing follow-up calendar for ${doc.name}. Continuous waitlist is ${doc.waitDays} days.`);
+                              }}
+                              className={`flex-shrink-0 px-3 py-2 rounded-2xl border text-left transition-all ${
+                                isSelected
+                                  ? "bg-blue-600 text-white border-blue-600 shadow-md ring-2 ring-blue-200"
+                                  : "bg-white text-slate-700 border-slate-200 hover:bg-slate-50"
+                              }`}
+                            >
+                              <p className="text-xs font-black truncate max-w-[130px]">{doc.name.split(",")[0]}</p>
+                              <div className="flex items-center gap-1 mt-0.5">
+                                <span className={`text-[9px] font-extrabold px-1.5 py-0.2 rounded-full ${
+                                  isSelected ? "bg-white/20 text-white" : "bg-red-100 text-red-800"
+                                }`}>
+                                  {doc.waitDays}d Wait
+                                </span>
+                                <span className={`text-[9px] ${isSelected ? "text-blue-100" : "text-slate-400"}`}>
+                                  {doc.speciality.split("&")[0]}
+                                </span>
+                              </div>
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+
+                    {/* 2. SELECTED DOCTOR PROFILE & CONTINUOUS WAITLIST BADGE */}
+                    <div className="rounded-3xl p-4 bg-gradient-to-br from-slate-900 to-blue-950 text-white shadow-lg space-y-3 text-left">
+                      <div className="flex items-start justify-between">
+                        <div>
+                          <span className="px-2 py-0.5 rounded-full text-[9px] font-extrabold uppercase tracking-wider bg-amber-400 text-slate-950">
+                            {activeDoctor.urgencyBadge}
+                          </span>
+                          <h3 className="text-sm font-black text-white mt-1">
+                            {activeDoctor.name}
+                          </h3>
+                          <p className="text-xs text-blue-200 font-medium">
+                            {activeDoctor.hospital} • {activeDoctor.opdRoom}
+                          </p>
+                          <p className="text-[10px] text-slate-300 mt-0.5">
+                            Reason: {activeDoctor.reason}
+                          </p>
+                        </div>
+
+                        <div className="text-right bg-white/10 px-3 py-2 rounded-2xl border border-white/15">
+                          <span className="text-2xl font-black font-mono leading-none text-amber-300">
+                            {activeDoctor.waitDays}
+                          </span>
+                          <span className="block text-[8px] uppercase tracking-wider text-slate-300 font-bold">
+                            Days Waitlist
+                          </span>
+                        </div>
+                      </div>
+
+                      {/* Continuous Waitlist Summary Alert */}
+                      <div className="p-2.5 rounded-2xl bg-white/10 border border-white/15 text-[11px] space-y-1">
+                        <div className="flex items-center gap-1.5 text-rose-300 font-extrabold">
+                          <span className="w-2 h-2 rounded-full bg-rose-500"></span>
+                          <span>Days 1 to {activeDoctor.waitDays - 1}: Continuous Waitlist Full (Strictly 🟥 Busy)</span>
+                        </div>
+                        <div className="flex items-center gap-1.5 text-emerald-300 font-extrabold">
+                          <span className="w-2 h-2 rounded-full bg-emerald-400"></span>
+                          <span>Day {activeDoctor.waitDays} onwards: Open for Advance Booking (Strictly 🟦 Free)</span>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* 3. 1-CLICK WHATSAPP CARETAKER BOOKING BUTTON */}
+                    <div className="p-3.5 rounded-2xl bg-emerald-50 border-2 border-emerald-300 shadow-sm space-y-2 text-left">
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs font-black text-emerald-950 uppercase tracking-tight flex items-center gap-1.5">
+                          <Icon name="phone" className="w-4 h-4 text-emerald-600" />
+                          Assisted Caretaker Slot Booking
+                        </span>
+                        <span className="text-[9px] font-bold px-2 py-0.5 rounded-full bg-emerald-200 text-emerald-900">
+                          Day {selectedCalendarDay} Selected
+                        </span>
+                      </div>
+                      <p className="text-xs text-emerald-900 leading-snug">
+                        Tap below to dispatch a pre-composed reservation request for <strong>{activeDoctor.name}</strong> on Day {selectedCalendarDay} directly to your son Ramesh.
+                      </p>
+                      <button
+                        onClick={() => setShowWhatsAppModal(true)}
+                        className="w-full py-3 rounded-xl bg-gradient-to-r from-emerald-600 to-emerald-700 hover:from-emerald-700 text-white font-black text-xs shadow-md shadow-emerald-600/30 active:scale-98 transition-all flex items-center justify-center gap-2"
+                      >
+                        <Icon name="share" className="w-4 h-4" />
+                        <span>{t.sendWhatsAppCaretaker}</span>
+                      </button>
+                    </div>
+
+                    {/* 4. REALISTIC CONTINUOUS CALENDAR GRID (RED WAITLIST -> BLUE OPEN SLOTS) */}
+                    <div className="rounded-3xl bg-white border border-slate-200 p-4 shadow-sm space-y-3">
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <h4 className="text-xs font-black text-slate-900 tracking-tight">
+                            {t.doctorCalendarTitle}
+                          </h4>
+                          <p className="text-[10px] text-slate-500">October - November 2026 (Continuous Queue Logic)</p>
+                        </div>
+                        <div className="flex items-center space-x-2 text-[10px] font-bold">
+                          <span className="flex items-center gap-1 text-blue-700">
+                            <span className="w-2.5 h-2.5 rounded-full bg-blue-500"></span> {t.blueFree}
+                          </span>
+                          <span className="flex items-center gap-1 text-red-700">
+                            <span className="w-2.5 h-2.5 rounded-full bg-red-500"></span> {t.redBusy}
+                          </span>
+                        </div>
+                      </div>
+
+                      {/* Day of Week Header */}
+                      <div className="grid grid-cols-7 gap-1 text-center font-mono text-[10px] font-bold text-slate-400 py-1">
+                        {["Su", "Mo", "Tu", "We", "Th", "Fr", "Sa"].map(d => (
+                          <div key={d}>{d}</div>
+                        ))}
+                      </div>
+
+                      {/* 35-Day Continuous Calendar Grid */}
+                      <div className="grid grid-cols-7 gap-1.5 text-center font-mono">
+                        {Array.from({ length: 35 }).map((_, i) => {
+                          const dayNum = i + 1;
+                          const isWaitlistLocked = dayNum < activeDoctor.waitDays;
+                          const isAvailable = dayNum >= activeDoctor.waitDays;
+                          const isSelected = selectedCalendarDay === dayNum;
+
+                          return (
+                            <button
+                              key={dayNum}
+                              type="button"
+                              onClick={() => {
+                                setSelectedCalendarDay(dayNum);
+                                if (isWaitlistLocked) {
+                                  speak(`Day ${dayNum} is inside the continuous ${activeDoctor.waitDays}-day waitlist period. Fully booked.`);
+                                } else {
+                                  speak(`Day ${dayNum} selected. Slot available with ${activeDoctor.name}.`);
+                                }
+                              }}
+                              className={`min-h-[44px] rounded-xl text-xs font-black transition-all flex flex-col items-center justify-center relative active:scale-95 ${
+                                isSelected
+                                  ? "ring-2 ring-blue-600 shadow-md bg-blue-600 text-white"
+                                  : isWaitlistLocked
+                                  ? "bg-red-50 text-red-900 border border-red-200 hover:bg-red-100"
+                                  : "bg-blue-50 text-blue-900 border border-blue-300 hover:bg-blue-100 font-extrabold"
+                              }`}
+                            >
+                              <span>{dayNum}</span>
+                              <span
+                                className={`w-1.5 h-1.5 rounded-full mt-0.5 ${
+                                  isSelected
+                                    ? "bg-white"
+                                    : isWaitlistLocked
+                                    ? "bg-red-500"
+                                    : "bg-blue-600"
+                                }`}
+                              ></span>
+                            </button>
+                          );
+                        })}
+                      </div>
+
+                      {/* Selected Day Status Card */}
+                      <div className="p-3 rounded-2xl bg-slate-50 border border-slate-200 text-xs text-left flex items-center justify-between">
+                        <div>
+                          <p className="font-extrabold text-slate-800">
+                            Day {selectedCalendarDay}: {selectedCalendarDay < activeDoctor.waitDays ? "Waitlist Full (No OPD)" : "Open for Booking"}
+                          </p>
+                          <p className="text-[10px] text-slate-500">
+                            {selectedCalendarDay < activeDoctor.waitDays 
+                              ? `Continuous queue booked until Day ${activeDoctor.waitDays - 1}.` 
+                              : `Doctor OPD Hours: ${activeDoctor.timing}`}
+                          </p>
+                        </div>
+                        {selectedCalendarDay >= activeDoctor.waitDays && (
+                          <button
+                            onClick={() => setShowWhatsAppModal(true)}
+                            className="px-2.5 py-1.5 rounded-xl bg-blue-600 text-white text-[10px] font-bold hover:bg-blue-700 flex-shrink-0"
+                          >
+                            Reserve Slot
+                          </button>
+                        )}
+                      </div>
+                    </div>
+
+                  </div>
+                )}
+
+                {/* ---------------------------------------------------------------------
+                    TAB 3: SCANNER (2-OPTION SELECTOR & MULTI-TABLET EQUIVALENCE)
+                    --------------------------------------------------------------------- */}
+                {activeTab === "scanner" && (
+                  <div className="space-y-4">
+                    {/* Mode Selector Toggle */}
+                    <div className="grid grid-cols-2 gap-2 bg-slate-100 p-1 rounded-2xl border border-slate-200">
+                      <button
+                        onClick={() => {
+                          setScannerView("prescription");
+                          speak("Prescription pad scanner active.");
+                        }}
+                        className={`py-2 rounded-xl text-xs font-black transition-all flex items-center justify-center gap-1.5 ${
+                          scannerView === "prescription" ? "bg-white text-blue-700 shadow-sm" : "text-slate-600 hover:text-slate-900"
+                        }`}
+                      >
+                        <Icon name="file-text" className="w-4 h-4" />
+                        <span>1. Scan Prescription</span>
+                      </button>
+                      <button
+                        onClick={() => {
+                          setScannerView("strip");
+                          speak("Tablet and blister strip camera scanner active.");
+                        }}
+                        className={`py-2 rounded-xl text-xs font-black transition-all flex items-center justify-center gap-1.5 ${
+                          scannerView === "strip" ? "bg-white text-blue-700 shadow-sm" : "text-slate-600 hover:text-slate-900"
+                        }`}
+                      >
+                        <Icon name="pill" className="w-4 h-4" />
+                        <span>2. Scan Tablet Strips</span>
+                      </button>
+                    </div>
+
+                    {/* Step 4 Multi-Tablet Highlight Badge */}
+                    <div className="p-3 rounded-2xl bg-gradient-to-r from-emerald-500/10 via-blue-500/10 to-indigo-500/10 border border-emerald-300 text-left space-y-1">
+                      <div className="flex items-center justify-between">
+                        <span className="text-[10px] font-black uppercase text-emerald-800 tracking-wider flex items-center gap-1">
+                          <Icon name="calculator" className="w-3.5 h-3.5 text-emerald-600" />
+                          Multi-Tablet Equivalence Engine
+                        </span>
+                        <span className="text-[9px] font-bold px-1.5 py-0.2 rounded bg-emerald-200 text-emerald-900">
+                          Active Step 4
+                        </span>
+                      </div>
+                      <p className="text-xs text-slate-800 font-semibold">
+                        Doctor wrote <strong>Pregabalin 150mg</strong>. Pharmacy out of 150mg stock, so patient scans <strong>TWO Pregabid 75mg strips</strong> together.
+                      </p>
+                    </div>
+
+                    {/* INTERACTIVE CAMERA VIEWFINDER */}
+                    <div className="w-full aspect-[4/3] rounded-3xl bg-slate-950 relative overflow-hidden border-2 border-slate-800 shadow-2xl flex flex-col justify-between p-4">
+                      {/* Viewfinder Target Reticle */}
+                      <div className="absolute inset-4 border-2 border-dashed border-emerald-400/50 rounded-2xl pointer-events-none"></div>
+
+                      {/* Animated Laser Scanning Beam */}
+                      <div className="absolute left-4 right-4 h-1 bg-gradient-to-r from-transparent via-emerald-400 to-transparent scanner-beam pointer-events-none"></div>
+
+                      {/* Top Viewfinder HUD */}
+                      <div className="flex items-center justify-between z-10 text-white font-mono text-[10px]">
+                        <span className="flex items-center gap-1 bg-black/60 backdrop-blur-sm px-2 py-0.5 rounded-full border border-white/20">
+                          <span className="w-2 h-2 rounded-full bg-red-500 animate-pulse"></span>
+                          LIVE OCR
+                        </span>
+                        <span className="bg-black/60 backdrop-blur-sm px-2 py-0.5 rounded-full border border-white/20">
+                          CONFIDENCE: 99.4%
+                        </span>
+                      </div>
+
+                      {/* Main Viewfinder Graphic Content */}
+                      <div className="z-10 my-auto flex flex-col items-center justify-center space-y-3">
+                        {scannerView === "prescription" ? (
+                          /* View 1: Prescription Slip Handwriting OCR */
+                          <div className="w-full max-w-[260px] p-3 rounded-xl paper-texture text-slate-900 shadow-xl border border-amber-300 rotate-[-1deg]">
+                            <div className="border-b border-blue-900/40 pb-1 mb-1 text-[9px] font-sans font-bold text-blue-900">
+                              KAVERI NEUROLOGY OPD • DR. K. MEENAKSHI
+                            </div>
+                            <div className="doctor-ink text-base text-blue-950">
+                              Rx: Tab. Pregabalin 150mg (HS) x 30d
+                            </div>
+                            <div className="text-[8px] font-mono text-emerald-800 font-bold mt-1">
+                              [OCR DETECTED: PREGABALIN 150MG]
+                            </div>
+                          </div>
+                        ) : (
+                          /* View 2: DUAL BLISTER STRIPS SCANNED SIMULTANEOUSLY */
+                          <div className="w-full flex items-center justify-center space-x-3">
+                            {/* Strip #1 */}
+                            <div className="p-2 rounded-xl bg-gradient-to-br from-slate-200 via-rose-100 to-slate-300 border-2 border-emerald-400 text-center shadow-lg relative">
+                              <span className="absolute -top-2 left-1 bg-emerald-600 text-white text-[7px] font-mono px-1 rounded">
+                                STRIP #1 (OCR OK)
+                              </span>
+                              <div className="w-16 h-8 rounded bg-red-600 text-white font-mono text-[9px] font-bold flex items-center justify-center">
+                                75 mg
+                              </div>
+                              <p className="text-[8px] font-mono font-bold text-slate-900 mt-0.5">Pregabid 75</p>
+                            </div>
+
+                            <span className="text-xl font-black text-white font-mono">+</span>
+
+                            {/* Strip #2 */}
+                            <div className="p-2 rounded-xl bg-gradient-to-br from-slate-200 via-rose-100 to-slate-300 border-2 border-emerald-400 text-center shadow-lg relative">
+                              <span className="absolute -top-2 left-1 bg-emerald-600 text-white text-[7px] font-mono px-1 rounded">
+                                STRIP #2 (OCR OK)
+                              </span>
+                              <div className="w-16 h-8 rounded bg-red-600 text-white font-mono text-[9px] font-bold flex items-center justify-center">
+                                75 mg
+                              </div>
+                              <p className="text-[8px] font-mono font-bold text-slate-900 mt-0.5">Pregabid 75</p>
+                            </div>
+                          </div>
+                        )}
+                      </div>
+
+                      {/* Bottom Viewfinder HUD / Formula Proof */}
+                      <div className="z-10 bg-black/75 backdrop-blur-md p-2 rounded-xl border border-white/20 text-center">
+                        <span className="text-emerald-400 font-mono text-xs font-black">
+                          {scannerView === "prescription" 
+                            ? "Handwritten Order: Pregabalin 150mg" 
+                            : "AI Sum: 75mg + 75mg = 150mg (Dosage Equivalent)"}
+                        </span>
+                      </div>
+                    </div>
+
+                    {/* COMPUTATION CARD: 75mg + 75mg = 150mg EQUIVALENCE */}
+                    <div className="rounded-3xl bg-emerald-50 border-2 border-emerald-400 p-4 shadow-sm text-left space-y-2">
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs font-black text-emerald-950 uppercase flex items-center gap-1.5">
+                          <Icon name="shield-check" className="w-4 h-4 text-emerald-600" />
+                          Multi-Tablet Cross-Verification Proof
+                        </span>
+                        <span className="text-[9px] font-mono font-bold bg-emerald-200 text-emerald-900 px-2 py-0.5 rounded-full">
+                          100% Match
+                        </span>
+                      </div>
+
+                      <div className="grid grid-cols-3 gap-2 text-center text-xs font-mono font-extrabold py-2 border-y border-emerald-200">
+                        <div>
+                          <span className="block text-[9px] text-slate-500 font-sans font-bold">Doctor Rx</span>
+                          <span className="text-blue-900">150 mg</span>
+                        </div>
+                        <div>
+                          <span className="block text-[9px] text-slate-500 font-sans font-bold">Scanned Strips</span>
+                          <span className="text-emerald-900">2x 75 mg</span>
+                        </div>
+                        <div>
+                          <span className="block text-[9px] text-slate-500 font-sans font-bold">Total Dose</span>
+                          <span className="text-emerald-900 font-black">150 mg</span>
+                        </div>
+                      </div>
+
+                      <p className="text-[11px] text-emerald-950 font-medium">
+                        Patient safety verified. Taking <strong>2 tablets of Pregabid 75mg</strong> delivers the exact therapeutic salt equivalent of 150mg Pregabalin ordered by Dr. K. Meenakshisundaram.
+                      </p>
+
+                      <button
+                        onClick={() => {
+                          confirmStage2Verification(4);
+                          speak("Pregabalin 150 milligram dosage equivalence verified with two 75 milligram strips.");
+                        }}
+                        className="w-full py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold text-xs shadow-md shadow-emerald-600/20 active:scale-98 transition-all flex items-center justify-center gap-1.5"
+                      >
+                        <Icon name="check" className="w-4 h-4" />
+                        <span>Confirm 2x 75mg = 150mg Equivalence</span>
+                      </button>
+                    </div>
+
+                  </div>
+                )}
+
+                {/* ---------------------------------------------------------------------
+                    TAB 4: REPORTS (FIX BROKEN X-RAYS VIA CRISP SVG LIGHTBOX)
+                    --------------------------------------------------------------------- */}
+                {activeTab === "reports" && (
+                  <div className="space-y-4">
+                    <div className="flex items-center justify-between text-left">
+                      <div>
+                        <h3 className="text-sm font-extrabold text-slate-900 tracking-tight flex items-center gap-1.5">
+                          <Icon name="file-text" className="w-4 h-4 text-blue-600" />
+                          {t.tabReports} ({allReports.length})
+                        </h3>
+                        <p className="text-[11px] text-slate-500">
+                          PACS Digital Imaging Soft Copies & Radiograph Lightbox (DICOM Style)
+                        </p>
+                      </div>
+                    </div>
+
+                    {allReports.length === 0 ? (
+                      <div className="rounded-2xl border-2 border-dashed border-slate-300 p-8 text-center bg-slate-50 space-y-2">
+                        <Icon name="file-text" className="w-10 h-10 text-slate-300 mx-auto" />
+                        <p className="text-xs font-bold text-slate-600">No Reports Loaded</p>
+                        <p className="text-[11px] text-slate-400">
+                          Upload Step 1 (ECG), Step 3 (Slip), Step 4 (Neuro), Step 5 (Knee X-Ray & MRI), or Step 6 (Chest X-Ray) via Sim bar.
+                        </p>
+                      </div>
+                    ) : (
+                      <div className="space-y-3">
+                        {allReports.map((rep) => (
+                          <div
+                            key={rep.id}
+                            onClick={() => setActiveReportModal(rep)}
+                            className="rounded-2xl p-3.5 bg-white border border-slate-200 shadow-sm hover:border-blue-400 cursor-pointer transition-all flex items-start justify-between group text-left"
+                          >
+                            <div className="flex items-start space-x-3">
+                              <div className={`p-2 rounded-xl flex items-center justify-center flex-shrink-0 ${
+                                rep.type.includes("dicom") ? "bg-slate-900 text-emerald-400" : rep.type === "ecg" ? "bg-rose-100 text-rose-600" : "bg-amber-100 text-amber-800"
+                              }`}>
+                                <Icon name={rep.type.includes("dicom") ? "activity" : rep.type === "ecg" ? "pulse" : "file-text"} className="w-5 h-5" />
+                              </div>
+                              <div>
+                                <span className="text-[9px] uppercase font-bold tracking-wider px-1.5 py-0.2 bg-slate-100 text-slate-600 rounded">
+                                  {rep.type.toUpperCase()}
+                                </span>
+                                <h4 className="text-xs font-extrabold text-slate-900 mt-0.5 group-hover:text-blue-600 transition-colors">
+                                  {rep.title}
+                                </h4>
+                                <p className="text-[10px] text-slate-500">
+                                  {rep.hospital} • {rep.date}
+                                </p>
+                                <p className="text-[10px] font-medium text-slate-700 mt-1 line-clamp-1">
+                                  Result: {rep.result}
+                                </p>
+                              </div>
+                            </div>
+
+                            <span className="text-[10px] font-bold text-blue-600 bg-blue-50 px-2 py-1 rounded-lg group-hover:bg-blue-600 group-hover:text-white transition-colors flex-shrink-0">
+                              Open PACS
+                            </span>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {/* ---------------------------------------------------------------------
+                    TAB 5: MED-MONITOR (Doctor's Unified View & Collision Forensics)
+                    --------------------------------------------------------------------- */}
+                {activeTab === "monitor" && (
+                  <div className="space-y-4 text-left">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <h3 className="text-sm font-extrabold text-slate-900 flex items-center gap-1.5">
+                          <Icon name="activity" className="w-4 h-4 text-blue-600" />
+                          {t.doctorTitle}
+                        </h3>
+                        <p className="text-[11px] text-slate-500">
+                          Cross-Hospital Polypharmacy Collision Forensics & Renal Trends
+                        </p>
+                      </div>
+                    </div>
+
+                    {/* Patient Biomarker Meters (eGFR 38, Creatinine 2.1, Potassium 4.9) */}
+                    <div className="grid grid-cols-3 gap-2">
+                      <div className="rounded-2xl p-3 bg-amber-50 border border-amber-200 text-center">
+                        <span className="text-[9px] font-bold text-amber-800 uppercase block">eGFR (MDRD)</span>
+                        <span className="text-lg font-black font-mono text-amber-950">38</span>
+                        <span className="text-[8px] text-amber-700 font-semibold block">mL/min (CKD 3b)</span>
+                      </div>
+                      <div className="rounded-2xl p-3 bg-rose-50 border border-rose-200 text-center">
+                        <span className="text-[9px] font-bold text-rose-800 uppercase block">Creatinine</span>
+                        <span className="text-lg font-black font-mono text-rose-950">2.1</span>
+                        <span className="text-[8px] text-rose-700 font-semibold block">mg/dL (High)</span>
+                      </div>
+                      <div className="rounded-2xl p-3 bg-red-50 border border-red-200 text-center">
+                        <span className="text-[9px] font-bold text-red-800 uppercase block">Serum K+</span>
+                        <span className="text-lg font-black font-mono text-red-950">4.9</span>
+                        <span className="text-[8px] text-red-700 font-semibold block">mEq/L (Borderline)</span>
+                      </div>
+                    </div>
+
+                    {/* Active Collisions Forensics List */}
+                    <div className="space-y-3">
+                      <h4 className="text-xs font-black text-slate-900 uppercase tracking-wider">
+                        Active Cross-Hospital Collisions ({activeAlerts.length})
+                      </h4>
+
+                      {activeAlerts.length === 0 ? (
+                        <div className="p-4 rounded-2xl bg-emerald-50 border border-emerald-200 text-center text-xs text-emerald-800 font-bold">
+                          ✓ No Active Collisions Detected. Add Step 2, 3, or 6 to simulate.
+                        </div>
+                      ) : (
+                        activeAlerts.map((alert) => (
+                          <div
+                            key={alert.id}
+                            className={`rounded-2xl p-3.5 border text-left space-y-2 ${
+                              alert.severity === "fatal" 
+                                ? "bg-red-50 border-red-300" 
+                                : alert.severity === "critical"
+                                ? "bg-rose-50 border-rose-300"
+                                : "bg-amber-50 border-amber-300"
+                            }`}
+                          >
+                            <div className="flex items-center justify-between">
+                              <span className="text-[9px] font-black uppercase px-2 py-0.5 rounded-full bg-red-600 text-white">
+                                {alert.severity}
+                              </span>
+                              <span className="text-[10px] font-mono text-slate-500 font-bold">
+                                AI Auto-Quarantined
+                              </span>
+                            </div>
+
+                            <h5 className="text-xs font-extrabold text-slate-900 leading-snug">
+                              {alert.title}
+                            </h5>
+
+                            <p className="text-[11px] text-slate-700 leading-relaxed">
+                              {alert.desc}
+                            </p>
+
+                            <div className="p-2 rounded-xl bg-white/70 border border-slate-200 text-[10px] text-slate-800">
+                              <span className="font-bold">Clinical Resolution:</span> {alert.action}
+                            </div>
+                          </div>
+                        ))
+                      )}
+                    </div>
+
+                    {/* Salts Bioavailability & Active Substances Table */}
+                    <div className="rounded-3xl bg-white border border-slate-200 p-4 shadow-sm space-y-2.5">
+                      <h4 className="text-xs font-black text-slate-900 uppercase tracking-wider">
+                        {t.saltsTable}
+                      </h4>
+                      <div className="divide-y divide-slate-100 text-xs">
+                        {allPills.map(p => (
+                          <div key={p.id} className="py-2 flex items-center justify-between">
+                            <div>
+                              <p className="font-extrabold text-slate-900">{p.name}</p>
+                              <p className="text-[10px] text-slate-500">{p.salt}</p>
+                            </div>
+                            <span className={`text-[9px] font-bold px-2 py-0.5 rounded-full ${
+                              p.quarantineReason ? "bg-red-100 text-red-800" : "bg-emerald-100 text-emerald-800"
+                            }`}>
+                              {p.quarantineReason ? "Quarantined" : "Active"}
+                            </span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+
+                  </div>
+                )}
+
+              </main>
+
+              {/* =========================================================================
+                  FIXED BOTTOM NAVIGATION BAR (MANDATORY ARCHITECTURE)
+                  ========================================================================= */}
+              <nav className="fixed bottom-0 left-1/2 -translate-x-1/2 w-full max-w-[430px] z-40 bg-white/95 backdrop-blur-md border-t border-slate-200 shadow-lg px-2 py-1.5">
+                <div className="flex items-center justify-around relative">
+                  {/* Tab 1: Info */}
+                  <button
+                    onClick={() => setActiveTab("info")}
+                    className={`flex flex-col items-center py-1 px-2 rounded-xl transition-all ${
+                      activeTab === "info" ? "text-blue-600 font-bold" : "text-slate-500 hover:text-slate-800"
+                    }`}
+                  >
+                    <Icon name="info" className="w-5 h-5" />
+                    <span className="text-[10px] mt-0.5">{t.tabInfo}</span>
+                  </button>
+
+                  {/* Tab 2: Follow-ups */}
+                  <button
+                    onClick={() => setActiveTab("followups")}
+                    className={`flex flex-col items-center py-1 px-2 rounded-xl transition-all ${
+                      activeTab === "followups" ? "text-blue-600 font-bold" : "text-slate-500 hover:text-slate-800"
+                    }`}
+                  >
+                    <Icon name="calendar" className="w-5 h-5" />
+                    <span className="text-[10px] mt-0.5">{t.tabFollow}</span>
+                  </button>
+
+                  {/* Tab 3: ELEVATED CENTRAL FAB SCANNER */}
+                  <div className="relative -top-5 flex flex-col items-center">
+                    <button
+                      onClick={() => setActiveTab("scanner")}
+                      className={`w-13 h-13 rounded-full flex items-center justify-center text-white shadow-xl ring-4 ring-white active:scale-95 transition-transform ${
+                        activeTab === "scanner"
+                          ? "bg-gradient-to-tr from-blue-700 to-indigo-600"
+                          : "bg-gradient-to-tr from-blue-600 to-emerald-500"
+                      }`}
+                      style={{ width: "52px", height: "52px" }}
+                    >
+                      <Icon name="scan" className="w-6 h-6 stroke-[2.5]" />
+                    </button>
+                    <span className="text-[9px] font-black text-blue-700 mt-1 uppercase tracking-wider">
+                      {t.tabScan}
+                    </span>
+                  </div>
+
+                  {/* Tab 4: Reports */}
+                  <button
+                    onClick={() => setActiveTab("reports")}
+                    className={`flex flex-col items-center py-1 px-2 rounded-xl transition-all ${
+                      activeTab === "reports" ? "text-blue-600 font-bold" : "text-slate-500 hover:text-slate-800"
+                    }`}
+                  >
+                    <Icon name="file-text" className="w-5 h-5" />
+                    <span className="text-[10px] mt-0.5">{t.tabReports}</span>
+                  </button>
+
+                  {/* Tab 5: Med-Monitor */}
+                  <button
+                    onClick={() => setActiveTab("monitor")}
+                    className={`flex flex-col items-center py-1 px-2 rounded-xl transition-all relative ${
+                      activeTab === "monitor" ? "text-blue-600 font-bold" : "text-slate-500 hover:text-slate-800"
+                    }`}
+                  >
+                    <Icon name="activity" className="w-5 h-5" />
+                    <span className="text-[10px] mt-0.5">{t.tabMonitor}</span>
+                    {activeAlerts.length > 0 && (
+                      <span className="absolute top-1 right-2 w-2 h-2 rounded-full bg-red-600"></span>
+                    )}
+                  </button>
+                </div>
+              </nav>
+            </>
+          )}
+
+          {/* =========================================================================
+              MODAL: VISUAL PILL MATCHER (ELDERLY BLISTER STRIP ZOOM)
+              ========================================================================= */}
+          {activeVisualPill && (
+            <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in">
+              <div className="w-full max-w-sm rounded-3xl bg-white p-5 shadow-2xl space-y-4 text-left">
+                <div className="flex items-center justify-between pb-2 border-b border-slate-100">
+                  <div className="flex items-center space-x-2">
+                    <span className="w-3 h-3 rounded-full bg-blue-600"></span>
+                    <h3 className="text-xs font-black uppercase text-slate-900 tracking-wider">
+                      {t.visualPillMatch}
+                    </h3>
+                  </div>
+                  <button
+                    onClick={() => setActiveVisualPill(null)}
+                    className="p-1 rounded-full text-slate-400 hover:text-slate-600 hover:bg-slate-100"
+                  >
+                    <Icon name="x" className="w-4 h-4" />
+                  </button>
+                </div>
+
+                {/* Big Visual Blister Strip Graphic */}
+                {(() => {
+                  const visual = PILL_VISUAL_MAP[activeVisualPill.id] || {
+                    blisterBg: "from-slate-200 to-slate-400",
+                    pillColor: "#ffffff",
+                    stripLabel: activeVisualPill.name,
+                    packagingDesc: { en: "Standard silver foil medicine strip.", ta: "நிலையான வெள்ளி மாத்திரை அட்டை.", hi: "सिल्वर फॉयल दवा पत्ता।" }
+                  };
+
+                  return (
+                    <div className="space-y-3">
+                      <div className={`w-full h-32 rounded-2xl p-3 shadow-inner border border-slate-300 flex flex-col justify-between overflow-hidden bg-gradient-to-br ${visual.blisterBg} relative`}>
+                        <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/30 to-transparent -rotate-45 pointer-events-none"></div>
+
+                        {/* Large Pill Pockets */}
+                        <div className="grid grid-cols-4 gap-2 z-10 my-auto">
+                          {Array.from({ length: 8 }).map((_, i) => (
+                            <div
+                              key={i}
+                              className="w-10 h-7 rounded-lg border-2 border-black/20 shadow-inner flex items-center justify-center mx-auto"
+                              style={{ backgroundColor: visual.pillColor }}
+                            >
+                              <span className="w-4 h-1 bg-white/40 rounded-full block"></span>
+                            </div>
+                          ))}
+                        </div>
+
+                        {/* Large Strip Brand Imprint */}
+                        <div className="z-10 flex items-center justify-between text-xs font-mono font-black text-slate-900">
+                          <span>{visual.stripLabel}</span>
+                          <span className="text-[9px] uppercase tracking-wider text-slate-800">Tamper-Proof Seal</span>
+                        </div>
+                      </div>
+
+                      {/* Pill Description in Selected Language */}
+                      <div className="p-3 rounded-2xl bg-blue-50 border border-blue-200 text-xs text-blue-950 space-y-1">
+                        <p className="font-extrabold">{activeVisualPill.name} ({activeVisualPill.salt})</p>
+                        <p className="text-[11px] leading-relaxed text-blue-900">
+                          {visual.packagingDesc[lang] || visual.packagingDesc.en}
+                        </p>
+                      </div>
+
+                      {/* Confirmation Action */}
+                      <button
+                        onClick={() => {
+                          togglePillLock(activeVisualPill.id);
+                          setActiveVisualPill(null);
+                        }}
+                        className="w-full py-3 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-black text-xs shadow-md shadow-emerald-600/30 flex items-center justify-center gap-1.5"
+                      >
+                        <Icon name="check" className="w-4 h-4" />
+                        <span>{t.matchConfirmation}</span>
+                      </button>
+                    </div>
+                  );
+                })()}
+              </div>
+            </div>
+          )}
+
+          {/* =========================================================================
+              MODAL: EDIT PATIENT PROFILE
+              ========================================================================= */}
+          {showProfileModal && (
+            <div className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in">
+              <div className="w-full max-w-sm rounded-3xl bg-white p-5 shadow-2xl space-y-4 text-left">
+                <div className="flex items-center justify-between pb-2 border-b border-slate-100">
+                  <h3 className="text-sm font-extrabold text-slate-900">{t.editProfile}</h3>
+                  <button onClick={() => setShowProfileModal(false)} className="text-slate-400 hover:text-slate-600">
+                    <Icon name="x" className="w-4 h-4" />
+                  </button>
+                </div>
+
+                <div className="space-y-3 text-xs">
+                  <div>
+                    <label className="block text-[11px] font-bold text-slate-700 mb-1">Patient Full Name</label>
+                    <input
+                      type="text"
+                      value={patient.name}
+                      onChange={(e) => setPatient(p => ({ ...p, name: e.target.value }))}
+                      className="w-full px-3 py-2 rounded-xl border border-slate-300 focus:ring-2 focus:ring-blue-500 font-semibold"
+                    />
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-2">
+                    <div>
+                      <label className="block text-[11px] font-bold text-slate-700 mb-1">Age (Years)</label>
+                      <input
+                        type="number"
+                        value={patient.age}
+                        onChange={(e) => setPatient(p => ({ ...p, age: parseInt(e.target.value) || 62 }))}
+                        className="w-full px-3 py-2 rounded-xl border border-slate-300 focus:ring-2 focus:ring-blue-500 font-semibold"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-[11px] font-bold text-slate-700 mb-1">Blood Group</label>
+                      <select
+                        value={patient.bloodGroup}
+                        onChange={(e) => setPatient(p => ({ ...p, bloodGroup: e.target.value }))}
+                        className="w-full px-3 py-2 rounded-xl border border-slate-300 focus:ring-2 focus:ring-blue-500 font-semibold bg-white"
+                      >
+                        <option value="O+ve">O+ve</option>
+                        <option value="A+ve">A+ve</option>
+                        <option value="B+ve">B+ve</option>
+                        <option value="AB+ve">AB+ve</option>
+                        <option value="O-ve">O-ve</option>
+                      </select>
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="block text-[11px] font-bold text-slate-700 mb-1">Caregiver / Son Phone</label>
+                    <input
+                      type="text"
+                      value={patient.phoneMasked}
+                      onChange={(e) => setPatient(p => ({ ...p, phoneMasked: e.target.value }))}
+                      className="w-full px-3 py-2 rounded-xl border border-slate-300 focus:ring-2 focus:ring-blue-500 font-semibold"
+                    />
+                  </div>
+                </div>
+
+                <button
+                  onClick={() => setShowProfileModal(false)}
+                  className="w-full py-2.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-extrabold text-xs shadow-md shadow-blue-500/20"
+                >
+                  Save Patient Record
+                </button>
+              </div>
+            </div>
+          )}
+
+          {/* =========================================================================
+              MODAL: UNIFIED PATIENT QR CODE
+              ========================================================================= */}
+          {showQrModal && (
+            <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in">
+              <div className="w-full max-w-sm rounded-3xl bg-white p-6 shadow-2xl text-center space-y-4">
+                <div className="flex items-center justify-between pb-2 border-b border-slate-100 text-left">
+                  <div>
+                    <h3 className="text-sm font-extrabold text-slate-900">{t.unifiedQr}</h3>
+                    <p className="text-[10px] text-slate-400">UID: MEDPULSE-IN-2026-KS62</p>
+                  </div>
+                  <button onClick={() => setShowQrModal(false)} className="text-slate-400 hover:text-slate-600">
+                    <Icon name="x" className="w-4 h-4" />
+                  </button>
+                </div>
+
+                {/* Big Dynamic QR Image in Modal */}
+                <div className="p-4 bg-slate-50 border border-slate-200 rounded-2xl flex flex-col items-center justify-center space-y-2">
+                  <img
+                    src="https://api.qrserver.com/v1/create-qr-code/?size=220x220&data=MEDPULSE-IN-2026-KS62-REPORTS"
+                    alt="Unified Patient QR Code"
+                    onClick={() => {
+                      setShowQrModal(false);
+                      setActiveTab('reports');
+                      speak("Doctor scanned Patient QR. Navigating directly to verified diagnostic reports.");
+                    }}
+                    className="w-48 h-48 object-contain rounded-lg cursor-pointer hover:opacity-80 transition-opacity"
+                  />
+                  <button 
+                    onClick={() => {
+                      setShowQrModal(false);
+                      setActiveTab('reports');
+                      speak("Doctor scanned Patient QR. Navigating directly to verified diagnostic reports.");
+                    }} 
+                    className="mt-3 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold rounded-xl flex items-center justify-center gap-2 shadow-md w-full transition-all active:scale-98"
+                  >
+                    📱 Simulate Doctor Scan → Opens Reports
+                  </button>
+                </div>
+
+                <div className="text-xs text-slate-600 font-medium">
+                  Scan at any hospital pharmacy or counter to pull verified active medications and block cross-prescribing collisions.
+                </div>
+
+                <button
+                  onClick={() => setShowQrModal(false)}
+                  className="w-full py-2.5 rounded-xl bg-slate-900 text-white font-bold text-xs"
+                >
+                  Close QR
+                </button>
+              </div>
+            </div>
+          )}
+
+          {/* =========================================================================
+              MODAL: WHATSAPP DISPATCH TO CARETAKER SON RAMESH
+              ========================================================================= */}
+          {showWhatsAppModal && (
+            <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in">
+              <div className="w-full max-w-sm rounded-3xl bg-white p-5 shadow-2xl space-y-4 text-left">
+                <div className="flex items-center justify-between pb-2 border-b border-slate-100">
+                  <div className="flex items-center space-x-2">
+                    <div className="w-7 h-7 rounded-full bg-emerald-500 text-white flex items-center justify-center">
+                      <Icon name="phone" className="w-4 h-4" />
+                    </div>
+                    <span className="text-xs font-black text-slate-900">
+                      WhatsApp Dispatch: Ramesh Swamy (Son)
+                    </span>
+                  </div>
+                  <button onClick={() => setShowWhatsAppModal(false)} className="text-slate-400 hover:text-slate-600">
+                    <Icon name="x" className="w-4 h-4" />
+                  </button>
+                </div>
+
+                <div className="p-3.5 rounded-2xl bg-emerald-50/80 border border-emerald-200 text-xs text-emerald-950 font-mono space-y-2 whitespace-pre-wrap leading-relaxed">
+{`Vanakkam Ramesh,
+
+Please book appointment for Appa (Thiru. Krishna Swamy, 62Y) with:
+• Doctor: ${activeDoctor.name}
+• Specialty: ${activeDoctor.speciality}
+• Clinic: ${activeDoctor.hospital}
+• OPD Room: ${activeDoctor.opdRoom}
+• Target Follow-up: Day ${selectedCalendarDay}
+• OPD Slot: ${activeDoctor.timing}
+
+Continuous hospital waitlist slot is now open.`}
+                </div>
+
+                <div className="flex items-center justify-between gap-2">
+                  <button
+                    onClick={() => {
+                      setShowWhatsAppModal(false);
+                      speak("WhatsApp booking request sent to son Ramesh.");
+                    }}
+                    className="flex-1 py-3 rounded-2xl bg-emerald-600 hover:bg-emerald-700 text-white font-black text-xs shadow-md shadow-emerald-600/30 flex items-center justify-center gap-1.5"
+                  >
+                    <Icon name="share" className="w-4 h-4" />
+                    <span>Send Message to Son</span>
+                  </button>
+                  <button
+                    onClick={() => setShowWhatsAppModal(false)}
+                    className="px-4 py-3 rounded-2xl bg-slate-100 text-slate-700 font-bold text-xs"
+                  >
+                    Cancel
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* =========================================================================
+              MODAL: EMERGENCY CAREGIVER QUICK-SHEET (3-DOT MENU)
+              ========================================================================= */}
+          {showEmergencyMenu && (
+            <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in">
+              <div className="w-full max-w-sm rounded-3xl bg-white p-5 shadow-2xl space-y-4 text-left">
+                <div className="flex items-center justify-between pb-2 border-b border-slate-100">
+                  <div className="flex items-center space-x-2">
+                    <span className="w-3 h-3 rounded-full bg-red-600 animate-ping"></span>
+                    <h3 className="text-xs font-black uppercase text-red-950 tracking-wider">
+                      Emergency Quick-Sheet
+                    </h3>
+                  </div>
+                  <button onClick={() => setShowEmergencyMenu(false)} className="text-slate-400 hover:text-slate-600">
+                    <Icon name="x" className="w-4 h-4" />
+                  </button>
+                </div>
+
+                <div className="p-3 rounded-2xl bg-red-50 border border-red-200 text-xs text-red-950 space-y-1">
+                  <p className="font-extrabold text-sm text-red-900">
+                    {patient.name} (62 Yrs / Male)
+                  </p>
+                  <p>Blood Group: <strong className="text-red-900">O+ve</strong></p>
+                  <p>Critical Diagnosis: <strong>CKD Stage 3b (eGFR 38), Polyneuropathy, HTN</strong></p>
+                  <p>Emergency Contact: <strong>Ramesh Swamy (Son) — +91 98422 11223</strong></p>
+                </div>
+
+                <div className="grid grid-cols-2 gap-2">
+                  <button
+                    onClick={() => {
+                      playEmergencyBeep();
+                      speak("Dispatching 108 emergency ambulance.");
+                    }}
+                    className="py-3 rounded-2xl bg-red-600 hover:bg-red-700 text-white font-black text-xs shadow-md shadow-red-600/30 flex items-center justify-center gap-1.5"
+                  >
+                    <Icon name="phone" className="w-4 h-4" />
+                    <span>Call 108 Ambulance</span>
+                  </button>
+                  <button
+                    onClick={() => {
+                      speak("Calling son Ramesh Swamy.");
+                    }}
+                    className="py-3 rounded-2xl bg-slate-900 hover:bg-slate-800 text-white font-black text-xs shadow-md flex items-center justify-center gap-1.5"
+                  >
+                    <Icon name="phone" className="w-4 h-4" />
+                    <span>Call Son Ramesh</span>
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* =========================================================================
+              MODAL: PACS RADIOGRAPH LIGHTBOX (WITH ZERO BROKEN IMAGES)
+              ========================================================================= */}
+          {activeReportModal && (
+            <div className="fixed inset-0 z-50 bg-black/90 backdrop-blur-md flex items-center justify-center p-3 animate-in fade-in">
+              <div className="w-full max-w-md rounded-3xl bg-slate-950 border border-slate-800 text-white overflow-hidden shadow-2xl flex flex-col max-h-[92vh]">
+                {/* PACS Lightbox Header */}
+                <div className="p-3.5 bg-slate-900/90 border-b border-slate-800 flex items-center justify-between text-left">
+                  <div>
+                    <span className="text-[9px] uppercase font-mono tracking-widest text-emerald-400">
+                      PACS DICOM VIEWER
+                    </span>
+                    <h4 className="text-xs font-black text-white truncate max-w-[240px]">
+                      {activeReportModal.title}
+                    </h4>
+                  </div>
+                  <button
+                    onClick={() => setActiveReportModal(null)}
+                    className="p-1 rounded-full text-slate-400 hover:text-white hover:bg-slate-800"
+                  >
+                    <Icon name="x" className="w-5 h-5" />
+                  </button>
+                </div>
+
+                {/* PACS Window/Level Sliders for Radiographs */}
+                {activeReportModal.type.includes("dicom") && (
+                  <div className="px-4 py-2 bg-slate-900/60 border-b border-slate-800 flex items-center justify-between text-[10px] font-mono text-slate-300">
+                    <div className="flex items-center gap-1.5">
+                      <span>Bright:</span>
+                      <input
+                        type="range"
+                        min="70"
+                        max="160"
+                        value={pacsBrightness}
+                        onChange={(e) => setPacsBrightness(e.target.value)}
+                        className="w-16 accent-blue-500 h-1 bg-slate-700 rounded-lg cursor-pointer"
+                      />
+                    </div>
+                    <div className="flex items-center gap-1.5">
+                      <span>Contrast:</span>
+                      <input
+                        type="range"
+                        min="80"
+                        max="200"
+                        value={pacsContrast}
+                        onChange={(e) => setPacsContrast(e.target.value)}
+                        className="w-16 accent-blue-500 h-1 bg-slate-700 rounded-lg cursor-pointer"
+                      />
+                    </div>
+                    <button
+                      onClick={() => setPacsInvert(prev => !prev)}
+                      className={`px-2 py-0.5 rounded text-[9px] font-bold border ${pacsInvert ? "bg-amber-400 text-slate-950 border-amber-400" : "bg-slate-800 text-slate-200 border-slate-700"}`}
+                    >
+                      Invert
+                    </button>
+                  </div>
+                )}
+
+                {/* Main Lightbox Body */}
+                <div className="flex-1 overflow-y-auto p-3 flex flex-col items-center justify-center relative bg-black min-h-[260px]">
+                  {activeReportModal.type === "ecg" ? (
+                    <div className="w-full thermal-ecg-grid rounded-xl p-3 border border-rose-300 text-slate-900 overflow-hidden shadow-inner">
+                      <div className="font-mono text-[9px] font-bold text-rose-900 flex justify-between mb-1">
+                        <span>LEAD II (25mm/s, 10mm/mV)</span>
+                        <span>HR: 74 BPM • PEAKED T-WAVES</span>
+                      </div>
+                      <svg className="w-full h-32" viewBox="0 0 400 100" preserveAspectRatio="none">
+                        <path
+                          d="M 0 50 L 20 50 L 25 45 L 30 50 L 40 50 L 45 60 L 50 15 L 55 75 L 60 50 L 70 50 L 78 30 L 86 50 L 110 50 
+                             L 130 50 L 135 45 L 140 50 L 150 50 L 155 60 L 160 15 L 165 75 L 170 50 L 180 50 L 188 30 L 196 50 L 220 50 
+                             L 240 50 L 245 45 L 250 50 L 260 50 L 265 60 L 270 15 L 275 75 L 280 50 L 290 50 L 298 30 L 306 50 L 330 50 
+                             L 350 50 L 355 45 L 360 50 L 370 50 L 375 60 L 380 15 L 385 75 L 390 50 L 400 50"
+                          fill="none"
+                          stroke="#be123c"
+                          strokeWidth="2"
+                        />
+                      </svg>
+                      <p className="text-[9px] font-mono text-rose-800 font-bold text-center mt-1">
+                        Left Ventricular Hypertrophy (LVH) with Peaked T-Waves
+                      </p>
+                    </div>
+                  ) : activeReportModal.type.includes("dicom") ? (
+                    /* GENUINE REAL PHOTOGRAPHIC MEDICAL RADIOGRAPHS (DICOM STYLE) */
+                    <div className="relative group w-full flex items-center justify-center overflow-hidden min-h-[260px] bg-black rounded-xl select-none">
+                      {/* DICOM Overlay HUD: Watermark, Matrix data, Orientation Marker */}
+                      <div className="absolute top-3 right-3 z-10 font-bold font-mono text-sm text-yellow-400 border border-yellow-400/50 px-2 py-0.5 rounded bg-black/60 shadow-md">
+                        R
+                      </div>
+                      <div className="absolute top-3 left-3 z-10 font-mono text-[9px] text-emerald-400/90 leading-tight bg-black/60 p-1.5 rounded border border-emerald-500/20 shadow-md text-left">
+                        KVp: 120 | mAs: 3.2<br/>
+                        Matrix: 2048x2048<br/>
+                        SID: 180cm • DICOM 3.0
+                      </div>
+
+                      {/* Genuine Photographic Radiograph / MRI / CT Image */}
+                      <img
+                        src={activeReportModal.imgUrl}
+                        alt={activeReportModal.title}
+                        referrerPolicy="no-referrer"
+                        crossOrigin="anonymous"
+                        style={{
+                          filter: `brightness(${pacsBrightness}%) contrast(${pacsContrast}%) ${pacsInvert ? "invert(1)" : ""}`
+                        }}
+                        className="max-h-72 w-auto object-contain rounded-lg shadow-2xl transition-all"
+                      />
+                    </div>
+                  ) : (
+                    /* Realistic Paper Prescription Slip */
+                    <div className="w-full paper-texture rounded-xl p-4 text-slate-900 border border-amber-300 shadow-xl rotate-[-0.5deg] text-left">
+                      <div className="border-b-2 border-blue-900/60 pb-1 mb-2">
+                        <p className="font-tamil font-bold text-blue-950 text-xs">
+                          {activeReportModal.hospital}
+                        </p>
+                        <p className="font-sans font-extrabold text-[10px] text-blue-900 uppercase">
+                          SPECIALIST OP CONSULTATION SLIP
+                        </p>
+                        <p className="text-[9px] text-slate-600 font-mono">OPD No: 88412 • Date: 29-OCT-2026 • Thiru. Krishna Swamy (62Y/M)</p>
+                      </div>
+
+                      <div className="doctor-ink text-sm space-y-1">
+                        <p className="font-bold text-base">Rx</p>
+                        {activeReportModal.id === "rep-neuro-slip" ? (
+                          <>
+                            <p className="text-base font-black text-blue-950">Tab. Pregabid 150mg -- 0 - 0 - 1 (HS) x 30d</p>
+                            <p className="text-sm text-slate-700">c/o Diabetic Peripheral Polyneuropathy, burning feet</p>
+                          </>
+                        ) : (
+                          <>
+                            <p className="text-base font-bold text-blue-950">Tab. Voveran SR 75mg -- 1 - 0 - 1 (p.c) x 10d</p>
+                            <p className="text-base font-bold text-blue-950">Tab. Pan 40mg -- 1 - 0 - 0 (a.c) x 10d</p>
+                            <p className="text-sm text-slate-700">c/o severe bilateral knee pain, o/e crepitus (+)</p>
+                          </>
+                        )}
+                      </div>
+
+                      <div className="flex items-center justify-between mt-3 pt-2 border-t border-slate-300">
+                        <div className="doctor-stamp px-3 py-1 text-[8px] font-sans font-black uppercase text-center">
+                          Dr. Specialist Reg: 45120
+                        </div>
+                        <div className="doctor-ink text-sm font-bold text-blue-900 rotate-[-8deg]">
+                          Dr. Specialist
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+                {/* Radiologist Formal Impression */}
+                <div className="p-3 bg-slate-900 border-t border-slate-800 space-y-1 text-left">
+                  <div className="flex items-center justify-between">
+                    <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">
+                      Diagnostic Impression
+                    </span>
+                    <span className="text-[9px] font-mono text-emerald-400">Verified by Radiologist</span>
+                  </div>
+                  <p className="text-xs text-slate-200 font-medium">
+                    {activeReportModal.result}
+                  </p>
+                </div>
+              </div>
+            </div>
+          )}
+
+        </div>
+      );
+    }
+
+    // Direct Mount
+    ReactDOM.createRoot(document.getElementById("root")).render(<MedPulseApp />);
+  </script>
+</body>
+</html>
